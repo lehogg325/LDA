@@ -107,6 +107,23 @@ async def test_quarter_top(client):
     assert r["results"][0]["total_expenses"] == 120000.0
 
 
+async def test_filing_debug_view(client):
+    detail = (await client.get(
+        "/api/filings/10000000-0000-0000-0000-000000000002")).json()
+    assert detail["amount"] == 75000.0 and detail["amount_type"] == "income"
+    assert detail["is_current"] is True and detail["is_original"] is False
+    assert detail["filing_document_url"].endswith("/print/")
+    assert detail["activities"][0]["lobbyists"] == ["ALICE SMITH"]
+
+    behind = (await client.get("/api/edge-filings", params={
+        "source_type": "registrant", "source_id": 1, "target_type": "client",
+        "target_id": 10, "year": 2023, "period": "first_quarter"})).json()
+    # Both the original and the amendment stand behind this edge, each with its doc URL.
+    assert len(behind["filings"]) == 2
+    assert all(f["filing_document_url"] for f in behind["filings"])
+    assert {f["is_current"] for f in behind["filings"]} == {True, False}
+
+
 async def test_meta_serves_disclaimer_and_quarters(client):
     r = (await client.get("/api/meta")).json()
     assert "cannot vouch" in r["disclaimer"]

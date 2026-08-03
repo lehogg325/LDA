@@ -24,6 +24,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(prog="lda-normalize")
     ap.add_argument("--all-verified", action="store_true",
                     help="load every verified filings partition not yet loaded")
+    ap.add_argument("--entities", action="store_true",
+                    help="also load registrants/clients/lobbyists listing pulls")
     ap.add_argument("--year", type=int)
     ap.add_argument("--period")
     ap.add_argument("--force", action="store_true", help="reload even if already loaded")
@@ -53,7 +55,7 @@ def main() -> None:
                 if args.force or not already:
                     candidates.append((endpoint, p))
 
-        if not candidates:
+        if not candidates and not args.entities:
             print("nothing to load (all verified partitions already normalized)")
             return
 
@@ -63,6 +65,12 @@ def main() -> None:
                 total += load_filings_partition(conn, p["filing_year"], p["filing_period"], type_map)
             else:
                 total += load_contributions_partition(conn, p["filing_year"], p["filing_period"])
+
+        if args.entities:
+            from .entities import load_entity_listing
+            for endpoint in ("registrants", "clients", "lobbyists"):
+                if any(p["endpoint"] == endpoint for p in verified_partitions(endpoint)):
+                    load_entity_listing(conn, endpoint)
 
         conn.execute("REFRESH MATERIALIZED VIEW entity_names")
         conn.commit()

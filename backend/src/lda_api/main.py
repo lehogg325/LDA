@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from . import db
-from .routers import diff, ego, meta, quarter, search, timeline
+from .routers import diff, ego, filings, meta, quarter, search, timeline
 from .settings import Settings
 
 
@@ -24,7 +24,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="LDA Network Visualizer API", lifespan=lifespan)
     for router in (search.router, ego.router, timeline.router,
-                   diff.router, quarter.router, meta.router):
+                   diff.router, quarter.router, meta.router, filings.router):
         app.include_router(router, prefix="/api")
 
     dist = Path(__file__).resolve().parents[4] / "frontend" / "dist"
