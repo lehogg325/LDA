@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 from .archive import clean_tmp_files
 from .client import LdaClient
@@ -25,6 +26,7 @@ def _setup_logging(cfg) -> None:
             logging.FileHandler(cfg.log_dir / "ingest.log"),
         ],
     )
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per request otherwise
 
 
 def _selected(args) -> list[tuple[str, int, str]]:
@@ -50,6 +52,9 @@ def main() -> None:
         p.add_argument("--endpoint")
         p.add_argument("--year", type=int)
         p.add_argument("--period")
+        if name == "run":
+            p.add_argument("--workers", type=int, default=None,
+                           help="parallel partition pulls (default: 3 keyed, 1 anonymous)")
     sub.add_parser("plan")
     sub.add_parser("status")
 
@@ -86,15 +91,28 @@ def main() -> None:
         if n_tmp:
             log.info("cleaned %d orphaned .tmp part files", n_tmp)
         client = LdaClient(cfg, retry_logger=manifest.log_retry)
-        log.info("mode: %s (%.0f req/min)", "authenticated" if client.authenticated else "ANONYMOUS",
-                 cfg.rate_per_sec * 60)
+        workers = args.workers or (3 if client.authenticated else 1)
+        log.info("mode: %s (%.0f req/min), %d partition worker(s)",
+                 "authenticated" if client.authenticated else "ANONYMOUS",
+                 cfg.rate_per_sec * 60, workers)
         try:
             pull_constants(cfg, client, manifest)
-            failures = []
-            for endpoint, year, period in _selected(args):
-                pull_partition(cfg, client, manifest, endpoint, year, period)
-                if not verify_partition(cfg, manifest, endpoint, year, period):
-                    failures.append((endpoint, year, period))
+            failures: list[tuple[str, int, str]] = []
+
+            def work(part: tuple[str, int, str]) -> tuple[tuple[str, int, str], bool]:
+                endpoint, year, period = part
+                # own connection per thread; the client (and its token bucket) is shared
+                m = Manifest(cfg.manifest_path)
+                try:
+                    pull_partition(cfg, client, m, endpoint, year, period)
+                    return part, verify_partition(cfg, m, endpoint, year, period)
+                finally:
+                    m.close()
+
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                for part, ok in pool.map(work, _selected(args)):
+                    if not ok:
+                        failures.append(part)
             if failures:
                 sys.exit(f"FAILED partitions: {failures}")
         finally:

@@ -79,8 +79,9 @@ Partition probe: 2013 `second_quarter` → 19,085 filings (764 pages).
 | constants | — | 8 (rate-exempt) |
 | **Total** | ~2.5M | **~100,300** |
 
-- **Wall-clock, keyed (120/min)**: sequential fetching is latency-bound at roughly 75–110 req/min →
-  **~15–22 hours**. Anonymous (15/min): ~4.7 days.
+- **Wall-clock, keyed (120/min)**: measured per-request latency ≈ 1.4 s, so *sequential* fetching
+  is latency-bound at ~44 req/min (~38 h). The ingest therefore runs **3 partition workers over a
+  shared token bucket**, which is quota-bound at ~114 req/min → **~15 hours**. Anonymous: ~4.7 days.
 - **Disk**: one filings page ≈ 80 KB JSON → ~5.5 GB raw filings + ~2 GB other endpoints
   uncompressed; **≈ 1–1.5 GB gzipped** on disk.
 - The manifest makes multi-session pulls harmless; if a secondary quota throttles the run it simply
@@ -103,10 +104,20 @@ Partition probe: 2013 `second_quarter` → 19,085 filings (764 pages).
    government entities for the filing as a whole (legacy import); only later postings break them
    down per lobbying activity. Every entity edge carries `attribution_level ∈ {activity, filing}`
    and the UI must not present filing-level rows as activity-scoped.
-2. **Client/lobbyist ID scope — open until step 2.** 136K distinct client IDs may be per
-   registrant-client *registration* rather than per real-world client (one company lobbied by 40
-   firms could be 40 IDs). Step 2 measures distinct `client.id` per exact name string in one
-   partition and reports here. Either way, API IDs stay the node keys (spec: no name dedup).
+2. **Client IDs are registration-scoped — RESOLVED (measured on 2013 Q2, 19,085 filings).**
+   A client gets a distinct numeric ID per registrant relationship: `COMCAST CORPORATION` → 31
+   client IDs in one quarter, `MICROSOFT CORPORATION` → 19. Conversely a (registrant, exact client
+   name) pair maps to >1 client ID in only 1 of 17,228 cases, and no client ID carried more than
+   one exact name. Registrant IDs are effectively entity-scoped (1 name collision in 4,605).
+   Lobbyist names map to >1 ID for 4.2% of names — partly registrant scoping, partly genuinely
+   distinct people sharing a name (`JAMES SMITH` → 5 IDs), indistinguishable by design.
+   **Consequences:** API IDs stay the node keys (per spec, no dedup, no auto-merge). The
+   registrant–client edge layer is a per-registration forest; an ego view anchored on one client ID
+   shows one registrant. To make "watch Microsoft's network" work, search groups results by *exact
+   name string* (already the `entity_names` table's key) and the UI can offer an explicitly-labeled
+   aggregated view across same-exact-name client IDs — a display-level grouping, never a data merge.
+   Ordering stability also confirmed here: 0 `dt_posted` violations across the full 764-page
+   sequence, 0 duplicate uuids, distinct uuids == reported count exactly.
 3. **`filing_period` enum** is `first_quarter…fourth_quarter, mid_year, year_end`. Semiannual
    periods (`mid_year`, `year_end`) belong to pre-2008-style filings and LD-203 contributions but
    are enumerated for filings partitions too, so nothing hides.

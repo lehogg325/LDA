@@ -1,7 +1,10 @@
-"""Token-bucket rate limiter. Sized from config to whatever the API permits."""
+"""Token-bucket rate limiter. Sized from config to whatever the API permits.
+Thread-safe: one bucket is shared by all partition-worker threads, so the aggregate
+request rate stays under the per-user quota no matter the concurrency."""
 
 from __future__ import annotations
 
+import threading
 import time
 
 
@@ -11,6 +14,7 @@ class TokenBucket:
         self.capacity = capacity
         self._tokens = capacity
         self._last = time.monotonic()
+        self._lock = threading.Lock()
 
     def _refill(self) -> None:
         now = time.monotonic()
@@ -19,13 +23,17 @@ class TokenBucket:
 
     def acquire(self) -> None:
         """Block until one token is available, then consume it."""
-        self._refill()
-        if self._tokens < 1.0:
-            time.sleep((1.0 - self._tokens) / self.rate)
-            self._refill()
-        self._tokens -= 1.0
+        while True:
+            with self._lock:
+                self._refill()
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    return
+                wait = (1.0 - self._tokens) / self.rate
+            time.sleep(wait)
 
     def drain(self) -> None:
         """Empty the bucket (called after a 429 so we restart slowly)."""
-        self._refill()
-        self._tokens = 0.0
+        with self._lock:
+            self._refill()
+            self._tokens = 0.0

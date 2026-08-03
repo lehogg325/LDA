@@ -56,9 +56,12 @@ def utcnow() -> str:
 class Manifest:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        # One Manifest (= one connection) per worker thread; WAL + busy_timeout make
+        # concurrent writers from parallel partition pulls safe.
         self.db = sqlite3.connect(path)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=NORMAL")
+        self.db.execute("PRAGMA busy_timeout=30000")
         self.db.executescript(SCHEMA)
         self.db.commit()
 
