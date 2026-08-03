@@ -18,13 +18,16 @@ PART_RE = re.compile(r"part-(\d{4})\.jsonl\.gz$")
 
 
 def partition_dir(raw_dir: Path, endpoint: str, year: int, period: str) -> Path:
+    base, _, repair = endpoint.partition("#")
     if year == 0 and period == "all":
-        return raw_dir / endpoint
-    alias = {
-        "first_quarter": "Q1", "second_quarter": "Q2", "third_quarter": "Q3",
-        "fourth_quarter": "Q4", "mid_year": "MY", "year_end": "YE",
-    }[period]
-    return raw_dir / endpoint / f"year={year}" / f"period={alias}"
+        d = raw_dir / base
+    else:
+        alias = {
+            "first_quarter": "Q1", "second_quarter": "Q2", "third_quarter": "Q3",
+            "fourth_quarter": "Q4", "mid_year": "MY", "year_end": "YE",
+        }[period]
+        d = raw_dir / base / f"year={year}" / f"period={alias}"
+    return d / repair if repair else d
 
 
 def clean_tmp_files(raw_dir: Path) -> int:

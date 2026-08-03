@@ -25,15 +25,22 @@ PAGE_SIZE = 25
 
 
 class StubClient:
-    """Mimics LdaClient.get_json for filings/?filing_year=&filing_period=&page=."""
+    """Mimics LdaClient.get_json for filings/?filing_year=&filing_period=&page=.
+
+    drop_in_forward: record indices silently omitted when serving ascending order —
+    models tie-block records lost at page seams. Reverse ordering serves everything,
+    like a real repair round traversing ties from the other end.
+    """
 
     def __init__(self, n_records: int, crash_after_page: int | None = None,
-                 grow_to: int | None = None, grow_at_page: int | None = None):
+                 grow_to: int | None = None, grow_at_page: int | None = None,
+                 drop_in_forward: tuple[int, ...] = ()):
         self.records = [{"filing_uuid": f"uuid-{i:05d}", "dt_posted": f"2013-04-{i % 28 + 1:02d}"}
                         for i in range(n_records)]
         self.crash_after_page = crash_after_page
         self.grow_to = grow_to
         self.grow_at_page = grow_at_page
+        self.drop_in_forward = set(drop_in_forward)
         self.pages_served = 0
 
     def get_json(self, path: str, params: dict) -> tuple[dict, str]:
@@ -42,13 +49,16 @@ class StubClient:
             while len(self.records) < self.grow_to:
                 i = len(self.records)
                 self.records.append({"filing_uuid": f"uuid-{i:05d}", "dt_posted": "2026-01-01"})
+        reverse = str(params.get("ordering", "")).startswith("-")
+        records = (list(reversed(self.records)) if reverse
+                   else [r for i, r in enumerate(self.records) if i not in self.drop_in_forward])
         start, end = (page - 1) * PAGE_SIZE, page * PAGE_SIZE
         count = len(self.records)
         body = {
             "count": count,
-            "next": None if end >= count else f"stub://next?page={page + 1}",
+            "next": None if end >= len(records) else f"stub://next?page={page + 1}",
             "previous": None,
-            "results": self.records[start:end],
+            "results": records[start:end],
         }
         self.pages_served += 1
         if self.crash_after_page is not None and self.pages_served > self.crash_after_page:
@@ -121,6 +131,26 @@ def test_verify_fails_loudly_on_gap(cfg):
     part = manifest.partition("filings", 2013, "second_quarter")
     assert part["status"] == "failed"
     assert "gap" in part["failure_reason"] or "distinct" in part["failure_reason"]
+
+
+def test_repair_round_recovers_tie_block_losses(cfg):
+    from lda_ingest.verify import ensure_complete
+
+    manifest = Manifest(cfg.manifest_path)
+    stub = StubClient(130, drop_in_forward=(49, 50))  # two records lost at a page seam
+    assert ensure_complete(cfg, stub, manifest, "filings", 2013, "second_quarter")
+
+    part = manifest.partition("filings", 2013, "second_quarter")
+    assert part["status"] == "verified"
+    repair = manifest.partition("filings#repair1", 2013, "second_quarter")
+    assert repair is not None and repair["status"] == "fetched"
+    assert len(set(_distinct_uuids_all_rounds(cfg, manifest))) == 130
+
+
+def _distinct_uuids_all_rounds(cfg, manifest):
+    from lda_ingest.verify import union_distinct_keys
+    keys, _ = union_distinct_keys(cfg, manifest, "filings", 2013, "second_quarter")
+    return keys
 
 
 def test_part_writer_commit_protocol(tmp_path):

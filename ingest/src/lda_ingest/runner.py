@@ -28,10 +28,21 @@ ORDERING = {"filings": "dt_posted", "contributions": "dt_posted",
             "registrants": "id", "clients": "id", "lobbyists": "id"}
 
 
-def base_params(endpoint: str, year: int, period: str) -> dict:
+def query_endpoint(endpoint_key: str) -> str:
+    """'filings#repair1' -> 'filings' (repair rounds share the API endpoint)."""
+    return endpoint_key.split("#", 1)[0]
+
+
+def base_params(endpoint_key: str, year: int, period: str) -> dict:
+    endpoint = query_endpoint(endpoint_key)
     params: dict = {"page_size": PAGE_SIZE}
-    if ORDERING.get(endpoint):
-        params["ordering"] = ORDERING[endpoint]
+    ordering = ORDERING.get(endpoint)
+    if ordering:
+        # Repair rounds alternate direction: reversed ordering moves both the page
+        # boundaries and the tie traversal, recovering records that same-timestamp
+        # tie blocks (legacy bulk imports) let slip through page seams.
+        round_no = int(endpoint_key.split("#repair", 1)[1]) if "#repair" in endpoint_key else 0
+        params["ordering"] = f"-{ordering}" if round_no % 2 == 1 else ordering
     if year:
         params["filing_year"] = year
         params["filing_period"] = period
@@ -72,7 +83,7 @@ def pull_partition(cfg: Config, client: LdaClient, manifest: Manifest,
     try:
         while not exhausted:
             try:
-                body, url = client.get_json(f"{endpoint}/", {**params, "page": page})
+                body, url = client.get_json(f"{query_endpoint(endpoint)}/", {**params, "page": page})
             except PageGone:
                 log.warning("%s %s/%s: page %d gone (result set shrank); stopping",
                             endpoint, year, period, page)

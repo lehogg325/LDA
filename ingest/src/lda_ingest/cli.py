@@ -12,8 +12,8 @@ from .client import LdaClient
 from .config import load_config
 from .manifest import Manifest
 from .planner import plan_partitions
-from .runner import pull_constants, pull_partition
-from .verify import verify_partition
+from .runner import pull_constants
+from .verify import ensure_complete, verify_partition
 
 
 def _setup_logging(cfg) -> None:
@@ -76,7 +76,8 @@ def main() -> None:
         records = 0
         for r in rows:
             by_status[r["status"]] = by_status.get(r["status"], 0) + 1
-            if r["status"] in ("fetched", "verified") and r["count_final"]:
+            if (r["status"] in ("fetched", "verified") and r["count_final"]
+                    and "#repair" not in r["endpoint"]):
                 records += r["count_final"]
         print(f"partitions: {dict(sorted(by_status.items()))}")
         print(f"records in fetched+verified partitions: {records:,}")
@@ -104,8 +105,7 @@ def main() -> None:
                 # own connection per thread; the client (and its token bucket) is shared
                 m = Manifest(cfg.manifest_path)
                 try:
-                    pull_partition(cfg, client, m, endpoint, year, period)
-                    return part, verify_partition(cfg, m, endpoint, year, period)
+                    return part, ensure_complete(cfg, client, m, endpoint, year, period)
                 finally:
                     m.close()
 

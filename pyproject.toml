@@ -13,3 +13,9 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["ingest/tests", "pipeline/tests", "backend/tests"]
+markers = [
+    "realdb: assertions against the production database (skipped when data absent)",
+]
