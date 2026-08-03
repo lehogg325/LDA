@@ -1,0 +1,23 @@
+[project]
+name = "lda-pipeline"
+version = "0.1.0"
+description = "Layers 2-3: normalize raw archive into Postgres; build edge and metric tables."
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]>=3.2,<4",
+    "orjson>=3.10",
+    "igraph>=0.11",
+]
+
+[project.scripts]
+lda-db = "lda_pipeline.migrate:main"
+lda-normalize = "lda_pipeline.normalize.cli:main"
+lda-edges = "lda_pipeline.edges.cli:main"
+lda-metrics = "lda_pipeline.metrics.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lda_pipeline"]

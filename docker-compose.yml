@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: lda-postgres
+    environment:
+      POSTGRES_USER: lda
+      POSTGRES_PASSWORD: lda
+      POSTGRES_DB: lda
+    ports:
+      - "5433:5432"   # 5433 to avoid clashing with any future local postgres
+    volumes:
+      - lda_pgdata:/var/lib/postgresql/data
+      - ./db/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lda -d lda"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  lda_pgdata:

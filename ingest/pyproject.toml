@@ -1,0 +1,18 @@
+[project]
+name = "lda-ingest"
+version = "0.1.0"
+description = "Layer 1: append-only raw archive puller for the LDA API. Depends on httpx only — no database libraries."
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28,<1",
+]
+
+[project.scripts]
+lda-ingest = "lda_ingest.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lda_ingest"]

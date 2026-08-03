@@ -1,0 +1,15 @@
+[project]
+name = "lda-visualizer"
+version = "0.1.0"
+description = "LDA longitudinal lobbying network visualizer — workspace root"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["ingest", "pipeline", "backend"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]

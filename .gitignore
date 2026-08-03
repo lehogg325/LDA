@@ -1,0 +1,21 @@
+# Data — the raw archive is multi-GB and never committed
+/data/
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+
+# OS / editor
+.DS_Store
