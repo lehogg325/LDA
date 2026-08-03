@@ -11,11 +11,14 @@ members = ["ingest", "pipeline", "backend"]
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
     "ruff>=0.6",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["ingest/tests", "pipeline/tests", "backend/tests"]
+asyncio_mode = "auto"
 markers = [
     "realdb: assertions against the production database (skipped when data absent)",
 ]
