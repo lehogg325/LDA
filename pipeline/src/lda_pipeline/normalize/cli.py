@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import datetime
 
 from ..db import connect, verified_partitions
 from .contributions import load_contributions_partition
@@ -17,6 +18,14 @@ from .loader import load_filings_partition
 from .refdata import filing_type_map, load_reference_tables
 
 log = logging.getLogger("lda_pipeline")
+
+
+def _ts(value) -> datetime:
+    """Postgres hands back datetimes; the SQLite manifest stores ISO strings with a
+    trailing Z. Comparing them as strings mis-sorts on the 'T' separator — parse both."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 
 def main() -> None:
@@ -50,8 +59,8 @@ def main() -> None:
                 if args.period and p["filing_period"] != args.period:
                     continue
                 key = (endpoint, p["filing_year"], p["filing_period"])
-                already = (key in loaded_state
-                           and str(loaded_state[key]) >= str(p["verified_at"] or ""))
+                already = (key in loaded_state and p["verified_at"] is not None
+                           and _ts(loaded_state[key]) >= _ts(p["verified_at"]))
                 if args.force or not already:
                     candidates.append((endpoint, p))
 
