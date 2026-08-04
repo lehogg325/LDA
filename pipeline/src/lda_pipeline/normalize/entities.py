@@ -11,6 +11,7 @@ import logging
 import psycopg
 
 from ..db import iter_partition_records
+from .transform import _int_or_none
 
 log = logging.getLogger("lda_pipeline")
 
@@ -33,7 +34,7 @@ def load_entity_listing(conn: psycopg.Connection, endpoint: str) -> int:
                     "state=EXCLUDED.state, country=EXCLUDED.country, "
                     "ppb_country=EXCLUDED.ppb_country, contact_name=EXCLUDED.contact_name, "
                     "dt_updated=EXCLUDED.dt_updated",
-                    (record["id"], record.get("name"), record.get("house_registrant_id"),
+                    (record["id"], record.get("name"), _int_or_none(record.get("house_registrant_id")),
                      record.get("city"), record.get("state"), record.get("country"),
                      record.get("ppb_country"), record.get("contact_name"),
                      record.get("dt_updated")))

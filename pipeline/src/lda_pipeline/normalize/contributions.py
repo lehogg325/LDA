@@ -10,6 +10,7 @@ import psycopg
 
 from ..db import iter_partition_records
 from .amendments import resolve_partition
+from .transform import _int_or_none
 
 log = logging.getLogger("lda_pipeline")
 
@@ -35,7 +36,7 @@ def load_contributions_partition(conn: psycopg.Connection, year: int, period: st
         reg, lob = record.get("registrant"), record.get("lobbyist")
         if reg:
             registrants[reg["id"]] = (
-                reg["id"], reg.get("name"), reg.get("house_registrant_id"), reg.get("city"),
+                reg["id"], reg.get("name"), _int_or_none(reg.get("house_registrant_id")), reg.get("city"),
                 reg.get("state"), reg.get("country"), reg.get("ppb_country"),
                 reg.get("contact_name"), reg.get("dt_updated"))
         if lob:

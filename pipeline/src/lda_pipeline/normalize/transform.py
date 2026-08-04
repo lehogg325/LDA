@@ -45,6 +45,16 @@ def _dec(value) -> Decimal | None:
     return None if value in (None, "") else Decimal(str(value))
 
 
+def _int_or_none(value):
+    """Incidental reference numbers (house_registrant_id, per-registrant client numbers)
+    contain stray strings in legacy data (observed: "New"). Core node IDs are NOT run
+    through this — a dirty node ID must fail loudly, not be silently dropped."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _lobbyist_display(lob: dict) -> str:
     return " ".join(p for p in (lob.get("first_name"), lob.get("middle_name"),
                                 lob.get("last_name")) if p).strip().upper()
@@ -68,12 +78,12 @@ def add_filing(bundle: Bundle, f: dict, retrieved_at: str, request_url: str,
                    else "expenses" if expenses is not None else None)
 
     bundle.registrants[reg["id"]] = (
-        reg["id"], reg.get("name"), reg.get("house_registrant_id"), reg.get("city"),
+        reg["id"], reg.get("name"), _int_or_none(reg.get("house_registrant_id")), reg.get("city"),
         reg.get("state"), reg.get("country"), reg.get("ppb_country"),
         reg.get("contact_name"), reg.get("dt_updated"),
     )
     bundle.clients[cli["id"]] = (
-        cli["id"], cli.get("name"), cli.get("client_id"), cli.get("client_government_entity"),
+        cli["id"], cli.get("name"), _int_or_none(cli.get("client_id")), cli.get("client_government_entity"),
         cli.get("state"), cli.get("country"), cli.get("ppb_state"), cli.get("ppb_country"),
         cli.get("effective_date"),
     )
