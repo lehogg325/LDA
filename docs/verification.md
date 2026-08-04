@@ -31,8 +31,22 @@ Print view URL pattern: `https://lda.gov/filings/public/filing/{filing_uuid}/pri
 - Raw-archive completeness: per partition, distinct filing UUIDs across all pull rounds
   ≥ the API's reported count (ingest `verify`, fails loudly otherwise).
 
-## Step-5 pins (to be added when edges are built)
+## Step-5 pins (verified 2026-08-04 against official print documents) — `pipeline/tests/test_handchecks.py`
 
-Planned: National Association of Realtors self-filer quarterly expenses (2023),
-U.S. Chamber of Commerce expenses, and a long-running firm/client represents-edge
-with income figures matched to the public search.
+**1. National Association of Realtors** (registrant 27070, self-filer → `expenses`):
+2023 quarterly expenses $13,320,000 / $10,080,000 / $10,360,000 / $18,360,000
+(FY total $52.12M, consistent with public reporting). Q4 amount confirmed verbatim in
+`https://lda.gov/filings/public/filing/39b697e9-f1c9-49e7-8b6a-0b0e5ae4f5bb/print/`.
+
+**2. Chamber of Commerce of the U.S.A.** (registrant 38756, self-filer → `expenses`):
+2023 quarterly expenses $18,660,000 / $16,390,000 / $13,590,000 / $19,080,000
+(FY total $67.72M). Q1 amount confirmed verbatim in
+`https://lda.gov/filings/public/filing/5198725f-3d13-4ad9-b14d-f796a3a2e856/print/`.
+
+**3. Akin Gump Strauss Hauer & Feld → City of Houston** (client 100481 → `income`):
+the same represents-edge appears in **73 consecutive quarters (2008 Q1 – 2026 Q1)** at
+$50,000/quarter income in 2023. Q4 2023 confirmed verbatim (firm name, client name,
+amount) in `https://lda.gov/filings/public/filing/5f1f3b80-d8d2-4cea-bf3c-678b1acfd83a/print/`.
+
+These also demonstrate the two money regimes staying disjoint: the self-filers report
+only `expenses`, the firm/client pair only `income`, and no view combines them.
