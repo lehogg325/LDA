@@ -1,5 +1,9 @@
 # Never uploaded to Vercel. The raw archive and local tooling stay local;
 # only the frontend build inputs and backend/src (for the API function) deploy.
+# pyproject.toml/uv.lock are the LOCAL uv workspace (root package has no deps) —
+# they must not shadow requirements.txt, which drives the function's installs.
+pyproject.toml
+uv.lock
 data/
 .venv/
 node_modules/

@@ -29,7 +29,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                    diff.router, quarter.router, meta.router, filings.router):
         app.include_router(router, prefix="/api")
 
-    dist = Path(__file__).resolve().parents[4] / "frontend" / "dist"
+    dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
     if dist.is_dir():
         app.mount("/", StaticFiles(directory=dist, html=True), name="frontend")
     return app
