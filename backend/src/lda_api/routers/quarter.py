@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ..db import pool
+from ..db import get_pool
 
 router = APIRouter()
 
@@ -36,7 +36,7 @@ async def top(year: int, period: str,
         ORDER BY m.{col} DESC
         LIMIT %(limit)s
     """
-    async with pool().connection() as conn:
+    async with (await get_pool()).connection() as conn:
         rows = await (await conn.execute(sql, {
             "year": year, "period": period, "node_type": node_type, "limit": limit,
         })).fetchall()

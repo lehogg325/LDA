@@ -55,13 +55,12 @@ class _client_for:
 
     async def __aenter__(self) -> httpx.AsyncClient:
         app = create_app(self.settings)
-        self.pool = apidb.create_pool(self.settings.database_url)
-        await self.pool.open()
-        app.state.settings = self.settings
+        apidb.create_pool(self.settings.database_url)
+        await apidb.get_pool()
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                         base_url="http://test")
         return self.client
 
     async def __aexit__(self, *exc):
         await self.client.aclose()
-        await self.pool.close()
+        await apidb.close_pool()

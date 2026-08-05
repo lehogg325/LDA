@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ..db import pool
+from ..db import get_pool
 
 router = APIRouter()
 
@@ -47,7 +47,7 @@ WHERE e.source_type = %(source_type)s AND e.source_id = %(source_id)s
 
 @router.get("/filings/{filing_uuid}")
 async def filing_detail(filing_uuid: str):
-    async with pool().connection() as conn:
+    async with (await get_pool()).connection() as conn:
         row = await (await conn.execute(FILING_SQL, {"uuid": filing_uuid})).fetchone()
         if row is None:
             raise HTTPException(404, "filing not found")
@@ -76,7 +76,7 @@ async def edge_filings(source_type: str = Query(), source_id: int = Query(),
                        target_type: str = Query(), target_id: int = Query(),
                        year: int = Query(), period: str = Query()):
     """The filings behind one rendered edge — the debug view's data source."""
-    async with pool().connection() as conn:
+    async with (await get_pool()).connection() as conn:
         uuids = [r[0] for r in await (await conn.execute(EDGE_FILINGS_SQL, {
             "source_type": source_type, "source_id": source_id,
             "target_type": target_type, "target_id": target_id,

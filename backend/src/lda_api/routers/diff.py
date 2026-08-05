@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from ..db import pool
+from ..db import get_pool
 from .ego import NODE_TYPES, build_ego
 
 router = APIRouter()
@@ -29,7 +29,7 @@ async def diff(request: Request,
     anchors = [(node_type, i) for i in anchor_ids]
     settings = request.app.state.settings
 
-    async with pool().connection() as conn:
+    async with (await get_pool()).connection() as conn:
         before = await build_ego(conn, anchors, from_year, from_period, 1, view,
                                  settings.node_cap, settings.neighbor_cap)
         after = await build_ego(conn, anchors, to_year, to_period, 1, view,

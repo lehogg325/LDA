@@ -45,6 +45,22 @@ extension, which the dump recreates).
 3. Deploy. `/` serves the app; `/api/*` hits the function; `/api/meta` is a quick
    health check (it also carries the ToS retrieval-date citation the footer displays).
 
+## Troubleshooting
+
+- **Check `/api/meta` first.** A JSON response means the function and database wiring
+  work. `"search_ready": false` means the restore is missing the `pg_trgm` extension or
+  the `entity_names` materialized view is empty — run on the hosted DB:
+  ```sql
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  REFRESH MATERIALIZED VIEW entity_names;
+  ```
+- **`/api/meta` errors or times out**: verify `DATABASE_URL` in Vercel env (must include
+  `?sslmode=require` for most providers) and that the DB accepts connections from
+  anywhere (serverless egress IPs vary). The pool opens lazily on first request —
+  no ASGI lifespan support is required of the runtime.
+- **Search returns 500 while other endpoints work**: almost always missing `pg_trgm`
+  (the `%` similarity operator) — see the SQL above.
+
 ## Updating data later
 
 Data updates happen locally (`lda-ingest run --all` → `lda-normalize --all-verified

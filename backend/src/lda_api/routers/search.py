@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from ..db import pool
+from ..db import get_pool
 
 router = APIRouter()
 
@@ -36,7 +36,7 @@ SELECT id, name FROM gov_entities WHERE name ILIKE '%%' || %(q)s || '%%' LIMIT 1
 
 @router.get("/search")
 async def search(q: str = Query(min_length=2), limit: int = Query(default=40, le=100)):
-    async with pool().connection() as conn:
+    async with (await get_pool()).connection() as conn:
         rows = await (await conn.execute(
             ENTITY_SQL, {"q": q, "prefix": q + "%", "limit": limit * 2})).fetchall()
         gov = await (await conn.execute(GOV_SQL, {"q": q})).fetchall()

@@ -16,13 +16,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        pool = db.create_pool(settings.database_url)
-        await pool.open()
-        app.state.settings = settings
+        # Pre-warm when lifespan runs (uvicorn, tests). Serverless runtimes may skip
+        # lifespan entirely — the pool then lazy-opens on first request (db.get_pool).
+        db.create_pool(settings.database_url)
+        await db.get_pool()
         yield
-        await pool.close()
+        await db.close_pool()
 
     app = FastAPI(title="LDA Network Visualizer API", lifespan=lifespan)
+    app.state.settings = settings  # set here, not in lifespan — serverless may skip lifespan
     for router in (search.router, ego.router, timeline.router,
                    diff.router, quarter.router, meta.router, filings.router):
         app.include_router(router, prefix="/api")

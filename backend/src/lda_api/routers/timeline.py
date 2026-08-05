@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ..db import pool
+from ..db import get_pool
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ async def timeline(node_type: str, node_id: int,
     if node_type not in ("registrant", "client", "lobbyist", "gov_entity"):
         raise HTTPException(404, f"unknown node type {node_type!r}")
     anchor_ids = [int(x) for x in ids.split(",")] if ids else [node_id]
-    async with pool().connection() as conn:
+    async with (await get_pool()).connection() as conn:
         rows = await (await conn.execute(
             SQL, {"node_type": node_type, "ids": anchor_ids})).fetchall()
     return {

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from ..db import pool
+from ..db import get_pool
 
 router = APIRouter()
 
@@ -142,7 +142,7 @@ async def ego(node_type: str, node_id: int, request: Request,
         raise HTTPException(404, f"unknown node type {node_type!r}")
     anchor_ids = [int(x) for x in ids.split(",")] if ids else [node_id]
     settings = request.app.state.settings
-    async with pool().connection() as conn:
+    async with (await get_pool()).connection() as conn:
         result = await build_ego(conn, [(node_type, i) for i in anchor_ids], year, period,
                                  hops, view, settings.node_cap, settings.neighbor_cap)
     result.update({"anchor": {"node_type": node_type, "ids": anchor_ids},
