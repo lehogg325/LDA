@@ -3,6 +3,7 @@
   "buildCommand": "cd frontend && npm ci && npm run build",
   "outputDirectory": "frontend/dist",
   "framework": null,
+  "regions": ["pdx1"],
   "functions": {
     "api/index.py": {
       "includeFiles": "backend/src/**",
