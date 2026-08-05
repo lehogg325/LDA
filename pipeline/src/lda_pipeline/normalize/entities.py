@@ -46,7 +46,7 @@ def load_entity_listing(conn: psycopg.Connection, endpoint: str) -> int:
                     "state=EXCLUDED.state, country=EXCLUDED.country, "
                     "ppb_state=EXCLUDED.ppb_state, ppb_country=EXCLUDED.ppb_country, "
                     "effective_date=EXCLUDED.effective_date",
-                    (record["id"], record.get("name"), record.get("client_id"),
+                    (record["id"], record.get("name"), _int_or_none(record.get("client_id")),
                      record.get("client_government_entity"), record.get("state"),
                      record.get("country"), record.get("ppb_state"),
                      record.get("ppb_country"), record.get("effective_date")))
