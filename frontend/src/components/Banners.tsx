@@ -14,14 +14,14 @@ export function TruncationBanner({ ego }: { ego: EgoResponse | undefined }) {
 export function LegendBar() {
   return (
     <div className="legend">
-      <span><i className="dot" style={{ background: "#2f6fb7" }} /> registrant</span>
-      <span><i className="dot" style={{ background: "#c96a2b" }} /> client</span>
-      <span><i className="dot" style={{ background: "#5a9e6f" }} /> lobbyist</span>
-      <span><i className="dot" style={{ background: "#8a5fa8" }} /> gov entity</span>
+      <span><i className="dot" style={{ background: "#4997D0" }} /> registrant</span>
+      <span><i className="dot" style={{ background: "#FF4F00" }} /> client</span>
+      <span><i className="dot" style={{ background: "#54A272" }} /> lobbyist</span>
+      <span><i className="dot" style={{ background: "#C97B2F" }} /> gov entity</span>
       <span className="sep" />
-      <span><i className="sw" style={{ background: "#e0a63c" }} /> new this quarter</span>
-      <span><i className="sw" style={{ background: "#dcdfe3" }} /> dropped since last</span>
-      <span><i className="sw" style={{ background: "#c9b3d9" }} /> pre-2021 filing-level entity link</span>
+      <span><i className="sw" style={{ background: "#FFA300" }} /> new this quarter</span>
+      <span><i className="sw" style={{ background: "#3c414d" }} /> dropped since last</span>
+      <span><i className="sw" style={{ background: "rgba(73,151,208,0.35)" }} /> pre-2021 filing-level entity link</span>
     </div>
   );
 }

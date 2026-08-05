@@ -28,19 +28,19 @@ export function TimelineStrip({ quarters }: { quarters: TimelineQuarter[] }) {
           <g key={q.period_ord} onClick={() => setQuarterOrd(q.period_ord)} className="strip-col">
             <rect
               x={PAD + i * bw} y={0} width={bw} height={H - 14}
-              fill={q.period_ord === quarterOrd ? "#fff3d6" : "transparent"}
+              fill={q.period_ord === quarterOrd ? "rgba(255, 163, 0, 0.16)" : "transparent"}
             />
             <rect
               x={PAD + i * bw + bw * 0.15} width={bw * 0.3}
               y={H - 22 - moneyH(q.total_income)} height={moneyH(q.total_income)}
-              fill="#b03a48"
+              fill="#FF4F00"
             >
               <title>{`${q.year} — income $${(q.total_income ?? 0).toLocaleString()}`}</title>
             </rect>
             <rect
               x={PAD + i * bw + bw * 0.55} width={bw * 0.3}
               y={H - 22 - moneyH(q.total_expenses)} height={moneyH(q.total_expenses)}
-              fill="#2f6fb7"
+              fill="#4997D0"
             >
               <title>{`${q.year} — expenses $${(q.total_expenses ?? 0).toLocaleString()}`}</title>
             </rect>
@@ -49,11 +49,11 @@ export function TimelineStrip({ quarters }: { quarters: TimelineQuarter[] }) {
             )}
           </g>
         ))}
-        <path d={degreePath} fill="none" stroke="#444" strokeWidth={1.2} />
+        <path d={degreePath} fill="none" stroke="#F5F2EC" strokeWidth={1.1} opacity={0.75} />
       </svg>
       <div className="strip-legend">
-        <span><i className="sw" style={{ background: "#b03a48" }} /> reported income</span>
-        <span><i className="sw" style={{ background: "#2f6fb7" }} /> reported expenses</span>
+        <span><i className="sw" style={{ background: "#FF4F00" }} /> reported income</span>
+        <span><i className="sw" style={{ background: "#4997D0" }} /> reported expenses</span>
         <span><i className="sw line" /> degree</span>
       </div>
     </div>

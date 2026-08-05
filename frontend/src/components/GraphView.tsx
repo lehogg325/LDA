@@ -21,11 +21,18 @@ interface Props {
   positions: LayoutResponse | null;
 }
 
+// Edge palette for the Deep Space surface. "New this quarter" flashes Chrome Yellow;
+// pre-2021 filing-level attribution renders as a dimmed variant of targeted blue
+// (secondary encoding: legend entry + debug-panel note, never color alone).
 const EDGE_COLORS: Record<string, string> = {
-  represents: "#b03a48",
-  worked_on: "#7d8a99",
-  targeted: "#8a5fa8",
+  represents: "rgba(255, 79, 0, 0.55)",   // Signal Orange
+  worked_on: "rgba(140, 140, 140, 0.35)", // Photographic Gray
+  targeted: "rgba(73, 151, 208, 0.55)",   // Celestial Blue
 };
+const EDGE_NEW = "#FFA300";               // Chrome Yellow
+const EDGE_LEGACY_ATTRIBUTION = "rgba(73, 151, 208, 0.22)";
+const EDGE_DROPPED = "rgba(140, 140, 140, 0.16)";
+const NODE_DROPPED = "#3c414d";
 
 export function GraphView({ union, positions }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -42,8 +49,27 @@ export function GraphView({ union, positions }: Props) {
       labelRenderedSizeThreshold: 8,
       labelDensity: 0.25,          // grouped anchors put many same-name nodes on screen
       labelGridCellSize: 140,      // — thin the labels instead of wallpapering them
+      labelColor: { color: "#F5F2EC" },
+      labelFont: "IBM Plex Mono, monospace",
+      labelSize: 10,
+      labelWeight: "500",
       allowInvalidContainer: true,
       enableEdgeEvents: true,
+      // Hovered nodes get a Newsprint "paper tag": aged-paper box, teletype ink.
+      defaultDrawNodeHover: (context, data, settings) => {
+        const label = data.label as string | null;
+        if (!label) return;
+        const size = (settings.labelSize as number) ?? 10;
+        const font = (settings.labelFont as string) ?? "monospace";
+        context.font = `500 ${size}px ${font}`;
+        const width = context.measureText(label).width + 10;
+        const x = data.x + data.size + 4;
+        const y = data.y - size / 2 - 3;
+        context.fillStyle = "#EDE8DC";
+        context.fillRect(x, y, width, size + 7);
+        context.fillStyle = "#1A1A1A";
+        context.fillText(label, x + 5, y + size + 1);
+      },
     });
     sigma.on("clickEdge", ({ edge }) => {
       const payload = graphRef.current.getEdgeAttribute(edge, "payload");
@@ -66,11 +92,13 @@ export function GraphView({ union, positions }: Props) {
     if (!union || !positions) return;
     for (const [key, n] of union.nodes) {
       const pos = positions[key] ?? { x: 0, y: 0 };
+      const baseSize = Math.max(2, Math.min(14, n.size * 1.6));
       graph.addNode(key, {
         x: pos.x, y: pos.y,
-        size: Math.max(2, Math.min(14, n.size * 1.6)),
+        size: baseSize,
+        baseSize,
         label: n.label,
-        color: NODE_TYPE_COLORS[n.node_type] ?? "#999",
+        color: NODE_TYPE_COLORS[n.node_type] ?? "#8C8C8C",
         nodeType: n.node_type,
         hidden: true,
       });
@@ -97,10 +125,17 @@ export function GraphView({ union, positions }: Props) {
       const status = temporalStatus(nowNodes.has(key), prevNodes.has(key), prev !== undefined);
       const style = STATUS_STYLE[status];
       const base = NODE_TYPE_COLORS[attrs.nodeType as string] ?? "#999";
+      // No `highlighted` flag: sigma renders highlighted nodes through the hover
+      // pipeline (label boxes on dozens of nodes). Anchors get size emphasis and a
+      // guaranteed label instead; "new" is carried by Chrome Yellow incident edges.
+      const isAnchor = anchors.has(key);
       graph.mergeNodeAttributes(key, {
         hidden: status === "hidden",
-        color: status === "dropped" ? "#c9ced4" : base,
-        highlighted: anchors.has(key) || status === "new",
+        color: status === "dropped" ? NODE_DROPPED : base,
+        size: isAnchor
+          ? Math.max(4, (attrs.baseSize as number) * 1.35)
+          : (attrs.baseSize as number),
+        forceLabel: isAnchor && anchors.size <= 3 && status !== "hidden",
         zIndex: status === "new" ? 2 : 1,
         opacityStatus: style.opacity,
       });
@@ -122,9 +157,9 @@ export function GraphView({ union, positions }: Props) {
           );
         graph.addEdge(s, t, {
           size: dropped ? 0.5 : Math.max(0.6, e.amount ? Math.log10(1 + e.amount) / 2.2 : 0.6),
-          color: dropped ? "#dcdfe3"
-            : e.attribution_level === "filing" ? "#c9b3d9"
-            : isNew ? "#e0a63c"
+          color: dropped ? EDGE_DROPPED
+            : e.attribution_level === "filing" ? EDGE_LEGACY_ATTRIBUTION
+            : isNew ? EDGE_NEW
             : EDGE_COLORS[e.edge_type],
           payload: e,
         });

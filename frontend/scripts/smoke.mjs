@@ -13,7 +13,7 @@ page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 page.on("pageerror", (e) => errors.push(String(e)));
 
 await page.goto("http://localhost:5173");
-await page.waitForSelector("text=LDA Lobbying Network");
+await page.waitForSelector("text=The Lobbying Network");
 
 await page.fill('input[placeholder*="Search registrants"]', "comcast corporation");
 await page.waitForSelector("li:has-text('COMCAST CORPORATION')", { timeout: 15000 });

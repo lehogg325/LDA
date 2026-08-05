@@ -15,11 +15,13 @@ export function temporalStatus(
   return "hidden";
 }
 
+// Ansible palette, validated for dark surfaces (#0D0D14) with the dataviz six-checks:
+// lightness band, chroma floor, CVD ΔE 8.3+, normal-vision ΔE 17.5+, contrast ≥3:1.
 export const NODE_TYPE_COLORS: Record<string, string> = {
-  registrant: "#2f6fb7",
-  client: "#c96a2b",
-  lobbyist: "#5a9e6f",
-  gov_entity: "#8a5fa8",
+  registrant: "#4997D0", // Celestial Blue
+  client: "#FF4F00",     // Signal Orange
+  lobbyist: "#54A272",   // Oxidized Copper (chroma-corrected for dark marks)
+  gov_entity: "#C97B2F", // Vacuum Tube Amber
 };
 
 export const STATUS_STYLE = {

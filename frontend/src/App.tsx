@@ -33,7 +33,10 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>LDA Lobbying Network</h1>
+        <div className="masthead">
+          <span className="kicker">Lobbying Disclosure Act · 2008 – Present</span>
+          <h1>The Lobbying Network</h1>
+        </div>
         <SearchBox />
         <div className="controls">
           <label>
@@ -55,8 +58,10 @@ export default function App() {
 
       {anchor === null ? (
         <div className="empty-state">
-          <p>Search for any registrant, client, lobbyist, or government entity and watch its
-            network change quarter by quarter, 2008 – present.</p>
+          <p>Every quarter since 2008, ten thousand lobbying firms and the interests they
+            represent have filed their disclosures. Search for any registrant, client,
+            lobbyist, or government entity — and watch its network change, quarter by
+            quarter, across eighteen years.</p>
         </div>
       ) : (
         <>
