@@ -1,0 +1,14 @@
+# Never uploaded to Vercel. The raw archive and local tooling stay local;
+# only the frontend build inputs and backend/src (for the API function) deploy.
+data/
+.venv/
+node_modules/
+ingest/
+pipeline/
+db/
+scripts/
+docs/
+frontend/smoke-artifacts/
+frontend/scripts/
+*.log
+.env

@@ -31,6 +31,12 @@ uv run lda-db migrate
 Get an API key at <https://lda.gov/api/register/>. Without one the ingest runs at the
 anonymous rate (15 req/min instead of 120) and the full pull takes ~3 days instead of ~12 hours.
 
+## Deployment
+
+Vercel-ready: static frontend + `api/index.py` serverless function (see
+[docs/deploy.md](docs/deploy.md)). Requires a hosted Postgres (~12 GB loaded); the
+ingest/pipeline stay local and the deployed app is read-only over the database.
+
 ## Data & terms
 
 Raw archive and manifest live under `data/` (gitignored, ~1 GB gzipped / ~5 GB raw JSON).

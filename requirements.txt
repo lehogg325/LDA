@@ -1,0 +1,6 @@
+# Serverless function dependencies (Vercel Python runtime).
+# The ingest/pipeline packages are NOT deployed — they run locally against the raw archive.
+fastapi>=0.115
+psycopg[binary]>=3.2,<4
+psycopg-pool>=3.2
+pydantic-settings>=2.5

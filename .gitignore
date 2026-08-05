@@ -19,3 +19,6 @@ frontend/dist/
 
 # OS / editor
 .DS_Store
+
+# Test screenshots
+frontend/smoke-artifacts/
