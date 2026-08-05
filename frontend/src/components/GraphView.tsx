@@ -15,10 +15,10 @@ import { useEffect, useRef } from "react";
 import Sigma from "sigma";
 import type { EgoEdge, EgoResponse } from "../api/client";
 import { nodeKey } from "../graph/useEgoWindow";
-import type { LayoutResponse } from "../graph/layout.worker";
+import type { Positions } from "../graph/orbitLayout";
 import {
-  DIMMED_EDGE, DIMMED_NODE, NO_SPOTLIGHT, spotlightEdgeStyle, spotlightNodeStyle,
-  topKByDegree, type SpotlightState,
+  chainEdges, DIMMED_EDGE, DIMMED_NODE, NO_SPOTLIGHT, spotlightEdgeStyle,
+  spotlightNodeStyle, topKByDegree, type SpotlightState,
 } from "../graph/spotlight";
 import { NODE_TYPE_COLORS, temporalStatus } from "../graph/temporalStatus";
 import { useStore } from "../state/store";
@@ -30,7 +30,7 @@ interface Props {
     quarters: number[];
     byQuarter: Map<number, EgoResponse>;
   } | null;
-  positions: LayoutResponse | null;
+  positions: Positions | null;
 }
 
 // Sigma's edge shader drops rgba alpha (and the node shader renders rgba as white),
@@ -58,6 +58,11 @@ export function GraphView({ union, positions }: Props) {
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph>(new Graph({ multi: true, type: "undirected" }));
   const spotlightRef = useRef<SpotlightState>(NO_SPOTLIGHT);
+  // Per-quarter filing index: filing_uuid -> display-edge keys (ghosts excluded).
+  const filingIndexRef = useRef<Map<string, string[]>>(new Map());
+  const anchorsRef = useRef<Set<string>>(new Set());
+  const visibleEdgeCountRef = useRef(0);
+  const setSpotlightRef = useRef<(node: string | null, pinned: boolean) => void>(() => {});
   const quarterOrd = useStore((s) => s.quarterOrd);
   const setSelectedEdge = useStore((s) => s.setSelectedEdge);
 
@@ -66,22 +71,53 @@ export function GraphView({ union, positions }: Props) {
     if (!containerRef.current || sigmaRef.current) return;
     const graph = graphRef.current;
 
+    // Spotlight state is DERIVED — only {node, pinned} persists; the lit sets are
+    // recomputed from the current graph + filing index (edge keys regenerate every
+    // quarter, so cached sets would go stale on scrub).
     const setSpotlight = (node: string | null, pinned: boolean) => {
-      if (node === null) {
+      if (node === null || !graph.hasNode(node) || graph.getNodeAttribute(node, "hidden")) {
         spotlightRef.current = NO_SPOTLIGHT;
+        sigmaRef.current?.refresh({ skipIndexation: true, schedule: true });
+        return;
+      }
+      const qDeg = (k: string) => (graph.getNodeAttribute(k, "qDegree") as number) ?? 0;
+
+      const neighborSpotlight = (): SpotlightState => {
+        const nodes = new Set(
+          graph.neighbors(node).filter((n) => !graph.getNodeAttribute(n, "hidden")));
+        nodes.add(node);
+        const edges = new Set(
+          graph.edges(node).filter((e) => !graph.getEdgeAttribute(e, "isGhost")));
+        return { node, pinned, mode: "neighbors", nodes, edges,
+                 labeled: topKByDegree(nodes, qDeg, NEIGHBOR_LABEL_CAP) };
+      };
+
+      // Anchor members skip chains — their chain is by definition the whole graph.
+      if (anchorsRef.current.has(node)) {
+        spotlightRef.current = neighborSpotlight();
       } else {
-        const neighbors = new Set(
-          graph.neighbors(node).filter((n) => !graph.getNodeAttribute(n, "hidden")),
-        );
-        spotlightRef.current = {
-          node, pinned, neighbors,
-          labeledNeighbors: topKByDegree(
-            neighbors, (k) => (graph.getNodeAttribute(k, "qDegree") as number) ?? 0,
-            NEIGHBOR_LABEL_CAP),
-        };
+        const incident = graph.edges(node)
+          .filter((e) => !graph.getEdgeAttribute(e, "isGhost"))
+          .map((e) => ({ key: e, uuids: (graph.getEdgeAttribute(e, "uuids") as string[]) ?? [] }));
+        const chain = chainEdges(incident, filingIndexRef.current, {
+          maxEdges: Math.max(20, 0.5 * visibleEdgeCountRef.current),
+          maxUuids: 400,
+        });
+        if (chain === null) {
+          spotlightRef.current = neighborSpotlight(); // mega-hub: stay selective
+        } else {
+          const nodes = new Set<string>([node]);
+          for (const e of chain) {
+            const [s, t] = graph.extremities(e);
+            nodes.add(s); nodes.add(t);
+          }
+          spotlightRef.current = { node, pinned, mode: "chain", nodes, edges: chain,
+                                   labeled: topKByDegree(nodes, qDeg, NEIGHBOR_LABEL_CAP) };
+        }
       }
       sigmaRef.current?.refresh({ skipIndexation: true, schedule: true });
     };
+    setSpotlightRef.current = setSpotlight;
 
     const sigma = new Sigma(graph, containerRef.current, {
       renderEdgeLabels: false,
@@ -124,8 +160,7 @@ export function GraphView({ union, positions }: Props) {
       },
       edgeReducer: (edge, data) => {
         if (data.hidden) return data;
-        const [source, target] = graph.extremities(edge);
-        const { emphasis } = spotlightEdgeStyle(spotlightRef.current, source, target);
+        const { emphasis } = spotlightEdgeStyle(spotlightRef.current, edge);
         if (emphasis === "raise") {
           const etype = (data as { etype?: string }).etype ?? "worked_on";
           const isNew = (data as { isNew?: boolean }).isNew;
@@ -207,6 +242,7 @@ export function GraphView({ union, positions }: Props) {
     const nowNodes = new Set(now.nodes.map((n) => nodeKey(n.node_type, n.node_id)));
     const prevNodes = new Set((prev?.nodes ?? []).map((n) => nodeKey(n.node_type, n.node_id)));
     const anchors = new Set(now.nodes.filter((n) => n.is_anchor).map((n) => nodeKey(n.node_type, n.node_id)));
+    anchorsRef.current = anchors;
     const qDegree = new Map(now.nodes.map((n) => [nodeKey(n.node_type, n.node_id), n.metrics?.degree ?? 0]));
 
     // Curated ambient labels: top hubs this quarter + one member per group anchor.
@@ -232,16 +268,12 @@ export function GraphView({ union, positions }: Props) {
       });
     });
 
-    // A pinned spotlight on a node that left the graph is meaningless — clear it.
-    if (spotlightRef.current.node && graph.getNodeAttribute(spotlightRef.current.node, "hidden")) {
-      spotlightRef.current = NO_SPOTLIGHT;
-    }
-
     // Edges: rebuilt per quarter, with parallel same-type edges aggregated into one
     // (overlapping straight lines hide multiplicity AND block clicks on all but the
     // topmost — the debug panel lists every underlying filing regardless).
     graph.clearEdges();
-    type Agg = { rep: EgoEdge; count: number; amountSum: number; anyNew: boolean; dropped: boolean };
+    type Agg = { rep: EgoEdge; count: number; amountSum: number; anyNew: boolean;
+                 dropped: boolean; uuids: string[] };
     const aggregates = new Map<string, Agg>();
 
     const prevEdgeKeys = new Set((prev?.edges ?? []).map(
@@ -258,10 +290,12 @@ export function GraphView({ union, positions }: Props) {
         const agg = aggregates.get(k);
         if (agg) {
           agg.count += 1;
+          agg.uuids.push(e.filing_uuid);
           if (e.amount !== null && e.amount_type === agg.rep.amount_type) agg.amountSum += e.amount;
           agg.anyNew ||= isNew;
         } else {
-          aggregates.set(k, { rep: e, count: 1, amountSum: e.amount ?? 0, anyNew: isNew, dropped });
+          aggregates.set(k, { rep: e, count: 1, amountSum: e.amount ?? 0, anyNew: isNew,
+                              dropped, uuids: [e.filing_uuid] });
         }
       }
     };
@@ -277,11 +311,13 @@ export function GraphView({ union, positions }: Props) {
       });
     }
 
+    const filingIndex = new Map<string, string[]>();
+    let visibleEdges = 0;
     for (const agg of aggregates.values()) {
       const e = agg.rep;
       const s = nodeKey(e.source.node_type, e.source.node_id);
       const t = nodeKey(e.target.node_type, e.target.node_id);
-      graph.addEdge(s, t, {
+      const edgeKey = graph.addEdge(s, t, {
         size: agg.dropped ? 0.5
           : Math.min(3, Math.max(0.6, agg.amountSum > 0 ? Math.log10(1 + agg.amountSum) / 2.2 : 0.6 + Math.log2(agg.count) * 0.2)),
         color: agg.dropped ? EDGE_DROPPED
@@ -290,9 +326,27 @@ export function GraphView({ union, positions }: Props) {
           : EDGE_COLORS[e.edge_type],
         etype: e.edge_type,
         isNew: agg.anyNew,
+        isGhost: agg.dropped,
+        uuids: agg.uuids,
         zIndex: agg.anyNew ? 2 : 1,
         payload: { ...e, agg_count: agg.count },
       });
+      if (!agg.dropped) {
+        visibleEdges++;
+        for (const u of agg.uuids) {
+          const list = filingIndex.get(u);
+          if (list) list.push(edgeKey);
+          else filingIndex.set(u, [edgeKey]);
+        }
+      }
+    }
+    filingIndexRef.current = filingIndex;
+    visibleEdgeCountRef.current = visibleEdges;
+
+    // Re-derive any held spotlight against the fresh edges/index (edge keys were just
+    // regenerated); clears itself if the pinned node left the quarter.
+    if (spotlightRef.current.node) {
+      setSpotlightRef.current(spotlightRef.current.node, spotlightRef.current.pinned);
     }
     sigmaRef.current?.refresh();
   }, [union, positions, quarterOrd]);

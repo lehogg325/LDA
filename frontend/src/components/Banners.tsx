@@ -22,7 +22,7 @@ export function LegendBar() {
       <span><i className="sw" style={{ background: "#FFA300" }} /> new this quarter</span>
       <span><i className="sw" style={{ background: "#3c414d" }} /> dropped since last</span>
       <span><i className="sw" style={{ background: "rgba(73,151,208,0.35)" }} /> pre-2021 filing-level entity link</span>
-      <span className="hint">hover to spotlight · click to pin · click an edge for filings</span>
+      <span className="hint">hover for the full lobbying chain · click to pin · click an edge for filings</span>
     </div>
   );
 }
