@@ -28,3 +28,12 @@ export function seedPosition(key: string): { x: number; y: number } {
   const radius = Math.sqrt(rand());
   return { x: radius * Math.cos(angle), y: radius * Math.sin(angle) };
 }
+
+/** Group members (registration-scoped IDs sharing an exact name) seed as a tight,
+ * deterministic constellation: shared centroid from the group id, small per-key
+ * jitter. Display-level only — nothing about the data is merged. */
+export function seedGroupPosition(groupId: string, key: string): { x: number; y: number } {
+  const centroid = seedPosition(groupId);
+  const jitter = seedPosition(key);
+  return { x: centroid.x + jitter.x * 0.15, y: centroid.y + jitter.y * 0.15 };
+}

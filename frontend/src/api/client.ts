@@ -41,6 +41,8 @@ export interface EgoEdge {
   issue_codes: string[] | null;
   attribution_level: "activity" | "filing" | null;
   is_superseded: boolean;
+  /** Client-side only: how many parallel edges were aggregated into this one. */
+  agg_count?: number;
 }
 
 export interface EgoResponse {

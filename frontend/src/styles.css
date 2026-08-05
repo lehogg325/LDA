@@ -181,7 +181,32 @@ select {
 
 /* ── Graph & debug panel ──────────────────────────────────────────────── */
 .main-row { display: flex; flex: 1; min-height: 480px; position: relative; }
-.graph-container { flex: 1; min-height: 480px; background: var(--space); }
+.graph-wrap { flex: 1; position: relative; min-height: 480px; }
+.graph-container { position: absolute; inset: 0; background: var(--space); }
+
+.camera-controls {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 10;
+}
+.camera-controls button {
+  font-family: var(--mono);
+  font-size: 14px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--rule);
+  background: rgba(19, 19, 28, 0.9);
+  color: var(--lunar);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.camera-controls button:hover { border-color: var(--orange); color: var(--orange); }
+
+.legend .hint { margin-left: auto; color: var(--gray); opacity: 0.8; text-transform: none; letter-spacing: 0.04em; }
 
 /* The debug panel is a paper artifact on the console: Newsprint card, Teletype ink. */
 .debug-panel {

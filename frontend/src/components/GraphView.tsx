@@ -1,14 +1,26 @@
 // One long-lived Sigma renderer. The graphology graph is mutated in place; quarter
 // changes only flip per-node/edge display attributes — never positions, never a
 // renderer rebuild, never a per-quarter layout run.
+//
+// Readability model (spotlight-first):
+// - Ambient view is nearly label-free: labelDensity 0 disables grid labels; only
+//   forceLabel nodes render (top-8 hubs per quarter + one member per group anchor).
+// - Hover spotlights a node: neighbors keep color and gain labels, everything else
+//   dims via node/edge reducers. Click pins the spotlight; stage click unpins.
+// - Never set `highlighted`: sigma routes highlighted nodes through the hover
+//   renderer, which is what produced the wall of paper tags.
 
 import Graph from "graphology";
 import { useEffect, useRef } from "react";
 import Sigma from "sigma";
-import type { EgoResponse } from "../api/client";
+import type { EgoEdge, EgoResponse } from "../api/client";
 import { nodeKey } from "../graph/useEgoWindow";
 import type { LayoutResponse } from "../graph/layout.worker";
-import { NODE_TYPE_COLORS, STATUS_STYLE, temporalStatus } from "../graph/temporalStatus";
+import {
+  DIMMED_EDGE, DIMMED_NODE, NO_SPOTLIGHT, spotlightEdgeStyle, spotlightNodeStyle,
+  topKByDegree, type SpotlightState,
+} from "../graph/spotlight";
+import { NODE_TYPE_COLORS, temporalStatus } from "../graph/temporalStatus";
 import { useStore } from "../state/store";
 
 interface Props {
@@ -21,64 +33,138 @@ interface Props {
   positions: LayoutResponse | null;
 }
 
-// Edge palette for the Deep Space surface. "New this quarter" flashes Chrome Yellow;
-// pre-2021 filing-level attribution renders as a dimmed variant of targeted blue
-// (secondary encoding: legend entry + debug-panel note, never color alone).
+// Sigma's edge shader drops rgba alpha (and the node shader renders rgba as white),
+// so every "translucent" tone is pre-blended opaque hex over Deep Space #0D0D14.
 const EDGE_COLORS: Record<string, string> = {
-  represents: "rgba(255, 79, 0, 0.55)",   // Signal Orange
-  worked_on: "rgba(140, 140, 140, 0.35)", // Photographic Gray
-  targeted: "rgba(73, 151, 208, 0.55)",   // Celestial Blue
+  represents: "#923109", // Signal Orange @ 55%
+  worked_on: "#39393e",  // Photographic Gray @ 35%
+  targeted: "#2e597b",   // Celestial Blue @ 55%
+};
+const EDGE_RAISED: Record<string, string> = {
+  represents: "#f34c02", // Signal Orange @ 95%
+  worked_on: "#a3a3a7",  // light gray @ ~72%
+  targeted: "#4690c7",   // Celestial Blue @ 95%
 };
 const EDGE_NEW = "#FFA300";               // Chrome Yellow
-const EDGE_LEGACY_ATTRIBUTION = "rgba(73, 151, 208, 0.22)";
-const EDGE_DROPPED = "rgba(140, 140, 140, 0.16)";
+const EDGE_LEGACY_ATTRIBUTION = "#1a2b3d"; // Celestial Blue @ 22%
+const EDGE_DROPPED = "#212127";            // gray @ 16%
 const NODE_DROPPED = "#3c414d";
+
+const AMBIENT_HUB_LABELS = 8;
+const NEIGHBOR_LABEL_CAP = 15;
 
 export function GraphView({ union, positions }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph>(new Graph({ multi: true, type: "undirected" }));
+  const spotlightRef = useRef<SpotlightState>(NO_SPOTLIGHT);
   const quarterOrd = useStore((s) => s.quarterOrd);
   const setSelectedEdge = useStore((s) => s.setSelectedEdge);
 
   // Mount once.
   useEffect(() => {
     if (!containerRef.current || sigmaRef.current) return;
-    const sigma = new Sigma(graphRef.current, containerRef.current, {
+    const graph = graphRef.current;
+
+    const setSpotlight = (node: string | null, pinned: boolean) => {
+      if (node === null) {
+        spotlightRef.current = NO_SPOTLIGHT;
+      } else {
+        const neighbors = new Set(
+          graph.neighbors(node).filter((n) => !graph.getNodeAttribute(n, "hidden")),
+        );
+        spotlightRef.current = {
+          node, pinned, neighbors,
+          labeledNeighbors: topKByDegree(
+            neighbors, (k) => (graph.getNodeAttribute(k, "qDegree") as number) ?? 0,
+            NEIGHBOR_LABEL_CAP),
+        };
+      }
+      sigmaRef.current?.refresh({ skipIndexation: true, schedule: true });
+    };
+
+    const sigma = new Sigma(graph, containerRef.current, {
       renderEdgeLabels: false,
-      labelRenderedSizeThreshold: 8,
-      labelDensity: 0.25,          // grouped anchors put many same-name nodes on screen
-      labelGridCellSize: 140,      // — thin the labels instead of wallpapering them
+      labelDensity: 0,                 // no ambient grid labels — forceLabel only
       labelColor: { color: "#F5F2EC" },
       labelFont: "IBM Plex Mono, monospace",
       labelSize: 10,
       labelWeight: "500",
+      zIndex: true,
+      minCameraRatio: 0.05,
+      maxCameraRatio: 1.5,
       allowInvalidContainer: true,
       enableEdgeEvents: true,
-      // Hovered nodes get a Newsprint "paper tag": aged-paper box, teletype ink.
+      // Hovered node gets a Newsprint "paper tag": aged-paper box, teletype ink.
       defaultDrawNodeHover: (context, data, settings) => {
         const label = data.label as string | null;
         if (!label) return;
         const size = (settings.labelSize as number) ?? 10;
         const font = (settings.labelFont as string) ?? "monospace";
         context.font = `500 ${size}px ${font}`;
-        const width = context.measureText(label).width + 10;
-        const x = data.x + data.size + 4;
+        const width = context.measureText(label).width + 8;
+        const x = data.x + data.size + 3;
         const y = data.y - size / 2 - 3;
         context.fillStyle = "#EDE8DC";
-        context.fillRect(x, y, width, size + 7);
+        context.fillRect(x, y, width, size + 6);
         context.fillStyle = "#1A1A1A";
-        context.fillText(label, x + 5, y + size + 1);
+        context.fillText(label, x + 4, y + size);
+      },
+      nodeReducer: (node, data) => {
+        if (data.hidden) return data;
+        const style = spotlightNodeStyle(spotlightRef.current, {
+          key: node, tStatus: (data as { tStatus?: string }).tStatus,
+        });
+        return {
+          ...data,
+          color: style.dim ? DIMMED_NODE : (data.color as string),
+          label: style.label === "suppress" ? null : (data.label as string),
+          forceLabel: style.forceLabel ?? (style.label === "keep" && (data.forceLabel as boolean)),
+        };
+      },
+      edgeReducer: (edge, data) => {
+        if (data.hidden) return data;
+        const [source, target] = graph.extremities(edge);
+        const { emphasis } = spotlightEdgeStyle(spotlightRef.current, source, target);
+        if (emphasis === "raise") {
+          const etype = (data as { etype?: string }).etype ?? "worked_on";
+          const isNew = (data as { isNew?: boolean }).isNew;
+          return {
+            ...data,
+            color: isNew ? EDGE_NEW : (EDGE_RAISED[etype] ?? (data.color as string)),
+            size: (data.size as number) * 1.6,
+            zIndex: 2,
+          };
+        }
+        if (emphasis === "dim") return { ...data, color: DIMMED_EDGE, zIndex: 0 };
+        return data;
       },
     });
+
+    sigma.on("enterNode", ({ node }) => {
+      if (!spotlightRef.current.pinned) setSpotlight(node, false);
+    });
+    sigma.on("leaveNode", () => {
+      if (!spotlightRef.current.pinned) setSpotlight(null, false);
+    });
+    sigma.on("clickNode", ({ node }) => {
+      if (spotlightRef.current.pinned && spotlightRef.current.node === node) {
+        setSpotlight(null, false);
+      } else {
+        setSpotlight(node, true);
+      }
+    });
     sigma.on("clickEdge", ({ edge }) => {
-      const payload = graphRef.current.getEdgeAttribute(edge, "payload");
+      const payload = graph.getEdgeAttribute(edge, "payload");
       if (payload) setSelectedEdge(payload);
     });
-    sigma.on("clickStage", () => setSelectedEdge(null));
+    sigma.on("clickStage", () => {
+      setSpotlight(null, false);
+      setSelectedEdge(null);
+    });
+
     sigmaRef.current = sigma;
-    // Debug/smoke-test handle.
-    (window as unknown as Record<string, unknown>).__lda = { graph: graphRef.current, sigma };
+    (window as unknown as Record<string, unknown>).__lda = { graph, sigma };
     return () => {
       sigma.kill();
       sigmaRef.current = null;
@@ -89,6 +175,7 @@ export function GraphView({ union, positions }: Props) {
   useEffect(() => {
     const graph = graphRef.current;
     graph.clear();
+    spotlightRef.current = NO_SPOTLIGHT;
     if (!union || !positions) return;
     for (const [key, n] of union.nodes) {
       const pos = positions[key] ?? { x: 0, y: 0 };
@@ -106,7 +193,7 @@ export function GraphView({ union, positions }: Props) {
     sigmaRef.current?.refresh();
   }, [union, positions]);
 
-  // Quarter changes: visibility + temporal styling only.
+  // Quarter changes: visibility + temporal styling + curated labels. Never positions.
   useEffect(() => {
     const graph = graphRef.current;
     if (!union || !positions || quarterOrd === null) return;
@@ -120,65 +207,107 @@ export function GraphView({ union, positions }: Props) {
     const nowNodes = new Set(now.nodes.map((n) => nodeKey(n.node_type, n.node_id)));
     const prevNodes = new Set((prev?.nodes ?? []).map((n) => nodeKey(n.node_type, n.node_id)));
     const anchors = new Set(now.nodes.filter((n) => n.is_anchor).map((n) => nodeKey(n.node_type, n.node_id)));
+    const qDegree = new Map(now.nodes.map((n) => [nodeKey(n.node_type, n.node_id), n.metrics?.degree ?? 0]));
+
+    // Curated ambient labels: top hubs this quarter + one member per group anchor.
+    const hubLabels = topKByDegree(nowNodes, (k) => qDegree.get(k) ?? 0, AMBIENT_HUB_LABELS);
+    if (anchors.size > 0) {
+      const [topAnchor] = topKByDegree(anchors, (k) => qDegree.get(k) ?? 0, 1);
+      if (topAnchor) hubLabels.add(topAnchor);
+    }
 
     graph.forEachNode((key, attrs) => {
       const status = temporalStatus(nowNodes.has(key), prevNodes.has(key), prev !== undefined);
-      const style = STATUS_STYLE[status];
-      const base = NODE_TYPE_COLORS[attrs.nodeType as string] ?? "#999";
-      // No `highlighted` flag: sigma renders highlighted nodes through the hover
-      // pipeline (label boxes on dozens of nodes). Anchors get size emphasis and a
-      // guaranteed label instead; "new" is carried by Chrome Yellow incident edges.
       const isAnchor = anchors.has(key);
       graph.mergeNodeAttributes(key, {
         hidden: status === "hidden",
-        color: status === "dropped" ? NODE_DROPPED : base,
+        tStatus: status,
+        qDegree: qDegree.get(key) ?? 0,
+        color: status === "dropped" ? NODE_DROPPED : (NODE_TYPE_COLORS[attrs.nodeType as string] ?? "#8C8C8C"),
         size: isAnchor
           ? Math.max(4, (attrs.baseSize as number) * 1.35)
           : (attrs.baseSize as number),
-        forceLabel: isAnchor && anchors.size <= 3 && status !== "hidden",
+        forceLabel: hubLabels.has(key) && status !== "hidden" && status !== "dropped",
         zIndex: status === "new" ? 2 : 1,
-        opacityStatus: style.opacity,
       });
     });
 
-    // Edges: drop and re-add per quarter (cheap at ego scale, keeps multi-edges honest).
+    // A pinned spotlight on a node that left the graph is meaningless — clear it.
+    if (spotlightRef.current.node && graph.getNodeAttribute(spotlightRef.current.node, "hidden")) {
+      spotlightRef.current = NO_SPOTLIGHT;
+    }
+
+    // Edges: rebuilt per quarter, with parallel same-type edges aggregated into one
+    // (overlapping straight lines hide multiplicity AND block clicks on all but the
+    // topmost — the debug panel lists every underlying filing regardless).
     graph.clearEdges();
-    const addEdges = (d: EgoResponse, dropped: boolean) => {
-      for (const e of d.edges) {
+    type Agg = { rep: EgoEdge; count: number; amountSum: number; anyNew: boolean; dropped: boolean };
+    const aggregates = new Map<string, Agg>();
+
+    const prevEdgeKeys = new Set((prev?.edges ?? []).map(
+      (e) => `${e.edge_type}|${e.source.node_type}:${e.source.node_id}|${e.target.node_type}:${e.target.node_id}`));
+    const collect = (edges: EgoEdge[], dropped: boolean) => {
+      for (const e of edges) {
         const s = nodeKey(e.source.node_type, e.source.node_id);
         const t = nodeKey(e.target.node_type, e.target.node_id);
         if (!graph.hasNode(s) || !graph.hasNode(t)) continue;
+        const pair = s < t ? `${s}|${t}` : `${t}|${s}`;
+        const k = `${pair}|${e.edge_type}|${dropped}|${e.attribution_level === "filing"}`;
         const isNew = !dropped && prev !== undefined &&
-          !(prev.edges ?? []).some(
-            (pe) =>
-              pe.edge_type === e.edge_type &&
-              pe.source.node_id === e.source.node_id && pe.source.node_type === e.source.node_type &&
-              pe.target.node_id === e.target.node_id && pe.target.node_type === e.target.node_type,
-          );
-        graph.addEdge(s, t, {
-          size: dropped ? 0.5 : Math.max(0.6, e.amount ? Math.log10(1 + e.amount) / 2.2 : 0.6),
-          color: dropped ? EDGE_DROPPED
-            : e.attribution_level === "filing" ? EDGE_LEGACY_ATTRIBUTION
-            : isNew ? EDGE_NEW
-            : EDGE_COLORS[e.edge_type],
-          payload: e,
-        });
+          !prevEdgeKeys.has(`${e.edge_type}|${e.source.node_type}:${e.source.node_id}|${e.target.node_type}:${e.target.node_id}`);
+        const agg = aggregates.get(k);
+        if (agg) {
+          agg.count += 1;
+          if (e.amount !== null && e.amount_type === agg.rep.amount_type) agg.amountSum += e.amount;
+          agg.anyNew ||= isNew;
+        } else {
+          aggregates.set(k, { rep: e, count: 1, amountSum: e.amount ?? 0, anyNew: isNew, dropped });
+        }
       }
     };
-    addEdges(now, false);
+
+    collect(now.edges, false);
     if (prev) {
       const nowEdgeKeys = new Set(now.edges.map(
         (e) => `${e.edge_type}|${e.source.node_type}:${e.source.node_id}|${e.target.node_type}:${e.target.node_id}`));
-      const droppedEdges = (prev.edges ?? []).filter(
-        (e) => !nowEdgeKeys.has(`${e.edge_type}|${e.source.node_type}:${e.source.node_id}|${e.target.node_type}:${e.target.node_id}`));
-      addEdges({ ...prev, edges: droppedEdges }, true);
-      // Nodes only present last quarter stay ghost-visible for one step.
+      collect((prev.edges ?? []).filter(
+        (e) => !nowEdgeKeys.has(`${e.edge_type}|${e.source.node_type}:${e.source.node_id}|${e.target.node_type}:${e.target.node_id}`)), true);
       graph.forEachNode((key) => {
         if (!nowNodes.has(key) && prevNodes.has(key)) graph.setNodeAttribute(key, "hidden", false);
+      });
+    }
+
+    for (const agg of aggregates.values()) {
+      const e = agg.rep;
+      const s = nodeKey(e.source.node_type, e.source.node_id);
+      const t = nodeKey(e.target.node_type, e.target.node_id);
+      graph.addEdge(s, t, {
+        size: agg.dropped ? 0.5
+          : Math.min(3, Math.max(0.6, agg.amountSum > 0 ? Math.log10(1 + agg.amountSum) / 2.2 : 0.6 + Math.log2(agg.count) * 0.2)),
+        color: agg.dropped ? EDGE_DROPPED
+          : e.attribution_level === "filing" ? EDGE_LEGACY_ATTRIBUTION
+          : agg.anyNew ? EDGE_NEW
+          : EDGE_COLORS[e.edge_type],
+        etype: e.edge_type,
+        isNew: agg.anyNew,
+        zIndex: agg.anyNew ? 2 : 1,
+        payload: { ...e, agg_count: agg.count },
       });
     }
     sigmaRef.current?.refresh();
   }, [union, positions, quarterOrd]);
 
-  return <div ref={containerRef} className="graph-container" />;
+  const camera = (fn: "animatedZoom" | "animatedUnzoom" | "animatedReset") => () =>
+    sigmaRef.current?.getCamera()[fn]({ duration: fn === "animatedReset" ? 400 : 250 });
+
+  return (
+    <div className="graph-wrap">
+      <div ref={containerRef} className="graph-container" />
+      <div className="camera-controls">
+        <button onClick={camera("animatedZoom")} title="Zoom in">+</button>
+        <button onClick={camera("animatedUnzoom")} title="Zoom out">−</button>
+        <button onClick={camera("animatedReset")} title="Fit graph">⌂</button>
+      </div>
+    </div>
+  );
 }

@@ -23,7 +23,10 @@ export function DebugPanel() {
   return (
     <aside className="debug-panel">
       <header>
-        <strong>{edge.edge_type}</strong> edge
+        <span>
+          <strong>{edge.edge_type}</strong> edge
+          {(edge.agg_count ?? 1) > 1 && ` · ${edge.agg_count} filings`}
+        </span>
         <button onClick={() => setSelectedEdge(null)}>×</button>
       </header>
       {edge.amount !== null && (

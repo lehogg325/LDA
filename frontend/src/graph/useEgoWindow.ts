@@ -105,12 +105,29 @@ export function useEgoWindow(anchor: Anchor | null, hops: 1 | 2, view: ViewMode)
     const worker = new Worker(new URL("./layout.worker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
     worker.onmessage = (e: MessageEvent<LayoutResponse>) => setPositions(e.data);
+
+    // Same-name anchor groups hold together in the layout via constellation seeding
+    // + weak phantom edges (worker-side only). Top-degree member first.
+    const groups: string[][] = [];
+    if (anchor && anchor.ids.length > 1) {
+      const members = anchor.ids
+        .map((id) => nodeKey(anchor.node_type, id))
+        .filter((k) => union.nodes.has(k))
+        .sort((a, b) => (union.nodes.get(b)!.size - union.nodes.get(a)!.size));
+      if (members.length > 1) groups.push(members);
+    }
+
     worker.postMessage({
-      nodes: [...union.nodes.entries()].map(([key, n]) => ({ key, size: n.size })),
+      // Clamped display sizes (same formula the renderer uses) so the overlap-relief
+      // pass sees the radii that are actually drawn.
+      nodes: [...union.nodes.entries()].map(([key, n]) => ({
+        key, size: Math.max(2, Math.min(14, n.size * 1.6)),
+      })),
       edges: [...union.edges.values()].map((e) => [e.s, e.t, e.w]),
+      groups,
     });
     return () => worker.terminate();
-  }, [union]);
+  }, [union, anchor]);
 
   return {
     timeline: timeline.data?.quarters ?? [],
