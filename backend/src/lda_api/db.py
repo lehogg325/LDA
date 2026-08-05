@@ -23,6 +23,10 @@ def create_pool(database_url: str) -> AsyncConnectionPool:
         database_url,
         min_size=int(os.environ.get("PGPOOL_MIN", "1")),
         max_size=int(os.environ.get("PGPOOL_MAX", "8")),
+        # Fail fast and loud when the database is unreachable (a misconfigured
+        # DATABASE_URL in serverless otherwise reads as a 30s hang).
+        timeout=8,
+        kwargs={"connect_timeout": 5},
         open=False,
     )
     _opened = False
