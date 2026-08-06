@@ -2,33 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import re
-
-import psycopg
 from fastapi import APIRouter, Request
 
 from ..db import get_pool
 
 router = APIRouter()
-
-
-@router.get("/debug-db")
-async def debug_db():
-    """Temporary deployment diagnostic: what connection string does this runtime see,
-    and what happens on a direct connect? Password always redacted."""
-    url = os.environ.get("DATABASE_URL")
-    if not url:
-        return {"database_url": None, "hint": "DATABASE_URL is not set in this environment"}
-    redacted = re.sub(r"(://[^:/@]+):[^@]*@", r"\1:****@", url)
-    try:
-        conn = await psycopg.AsyncConnection.connect(url, connect_timeout=6)
-        await conn.close()
-        return {"database_url": redacted, "connect": "ok"}
-    except Exception as exc:  # noqa: BLE001 — the whole point is to surface it
-        msg = re.sub(r"password[^,)]*", "password ****", str(exc))
-        return {"database_url": redacted, "connect": "failed",
-                "error": type(exc).__name__, "message": msg[:400]}
 
 
 @router.get("/meta")
