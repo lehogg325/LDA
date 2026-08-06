@@ -45,9 +45,12 @@ export function useEgoWindow(anchor: Anchor | null, hops: 1 | 2, view: ViewMode)
       queryFn: () => api.ego(anchor!.node_type, anchor!.ids, q.year, q.period, hops, view),
       enabled: anchor !== null,
       staleTime: Infinity,
+      retry: 3,
+      retryDelay: (attempt: number) => Math.min(8000, 1000 * 2 ** attempt),
     })),
     combine: (results) => ({
       loaded: results.filter((r) => r.data).length,
+      failed: results.filter((r) => r.isError).length,
       data: results.map((r) => r.data ?? null),
     }),
   });
@@ -108,6 +111,7 @@ export function useEgoWindow(anchor: Anchor | null, hops: 1 | 2, view: ViewMode)
     timeline: timeline.data?.quarters ?? [],
     presenceQuarters,
     loadedQuarters: egos.loaded,
+    failedQuarters: egos.failed,
     union,
     positions,
     isLoading: anchor !== null && (!allLoaded || positions === null),

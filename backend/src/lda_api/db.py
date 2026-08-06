@@ -28,7 +28,10 @@ def create_pool(database_url: str) -> AsyncConnectionPool:
         # Fail fast and loud when the database is unreachable (a misconfigured
         # DATABASE_URL in serverless otherwise reads as a 30s hang).
         timeout=8,
-        kwargs={"connect_timeout": 5},
+        # prepare_threshold=None disables psycopg auto-prepared statements, making the
+        # pool safe behind transaction-mode poolers (Supavisor :6543) as well as session
+        # mode; connect_timeout keeps unreachable-DB failures fast and loud.
+        kwargs={"connect_timeout": 5, "prepare_threshold": None},
         open=False,
     )
     _opened = False

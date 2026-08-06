@@ -87,13 +87,32 @@ async function get<T>(url: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+// Anchoring fetches up to ~74 quarters; unbounded parallelism stampedes serverless
+// backends (one function invocation per request) into database connection limits.
+// A small semaphore keeps the window load fast without the thundering herd.
+const MAX_CONCURRENT_EGO = 6;
+let egoActive = 0;
+const egoWaiters: (() => void)[] = [];
+async function egoSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (egoActive >= MAX_CONCURRENT_EGO) {
+    await new Promise<void>((resolve) => egoWaiters.push(resolve));
+  }
+  egoActive++;
+  try {
+    return await fn();
+  } finally {
+    egoActive--;
+    egoWaiters.shift()?.();
+  }
+}
+
 export const api = {
   search: (q: string) =>
     get<{ results: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
   ego: (t: NodeType, ids: number[], year: number, period: string, hops: number, view: ViewMode) =>
-    get<EgoResponse>(
+    egoSlot(() => get<EgoResponse>(
       `/api/ego/${t}/${ids[0]}?ids=${ids.join(",")}&year=${year}&period=${period}&hops=${hops}&view=${view}`,
-    ),
+    )),
   timeline: (t: NodeType, ids: number[]) =>
     get<{ quarters: TimelineQuarter[] }>(`/api/timeline/${t}/${ids[0]}?ids=${ids.join(",")}`),
   meta: () => get<Meta>("/api/meta"),

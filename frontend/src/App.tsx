@@ -18,7 +18,7 @@ export default function App() {
   const setView = useStore((s) => s.setView);
   const setHops = useStore((s) => s.setHops);
 
-  const { timeline, presenceQuarters, loadedQuarters, union, positions, isLoading } =
+  const { timeline, presenceQuarters, loadedQuarters, failedQuarters, union, positions, isLoading } =
     useEgoWindow(anchor, hops, view);
 
   // Default the slider to the latest quarter in the window once loaded.
@@ -71,7 +71,8 @@ export default function App() {
               <span className="note"> exact-name group of {anchor.ids.length} registration-scoped IDs (no records merged)</span>
             )}
             {isLoading && (
-              <span className="loading"> loading window… {loadedQuarters}/{presenceQuarters.length} quarters</span>
+              <span className="loading"> loading window… {loadedQuarters}/{presenceQuarters.length} quarters
+                {failedQuarters > 0 && ` (${failedQuarters} failed — retrying)`}</span>
             )}
           </div>
           <TruncationBanner ego={currentEgo} />
