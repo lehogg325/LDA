@@ -19,8 +19,10 @@ def create_pool(database_url: str) -> AsyncConnectionPool:
     # Serverless deployments (one pool per warm function instance) should set
     # PGPOOL_MIN=0 / PGPOOL_MAX=4 or so; the defaults suit a long-lived server.
     global _pool, _opened
+    # Env-var pastes routinely smuggle a trailing newline in (observed live: psycopg
+    # rejecting sslmode "require\n") — normalize before connecting.
     _pool = AsyncConnectionPool(
-        database_url,
+        database_url.strip(),
         min_size=int(os.environ.get("PGPOOL_MIN", "1")),
         max_size=int(os.environ.get("PGPOOL_MAX", "8")),
         # Fail fast and loud when the database is unreachable (a misconfigured
