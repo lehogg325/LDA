@@ -13,6 +13,16 @@ export interface SelectedNode {
   label: string;
 }
 
+/** A node whose own hops-1 connections have been added to the graph. Client/lobbyist
+ * expansions carry their whole exact-name group of registration-scoped IDs. */
+export interface Expansion {
+  node_type: NodeType;
+  ids: number[];
+  label: string;
+}
+
+export const MAX_EXPANSIONS = 12;
+
 interface AppState {
   anchor: Anchor | null;
   quarterOrd: number | null; // currently displayed quarter (period_ord)
@@ -20,15 +30,20 @@ interface AppState {
   hops: 1 | 2;
   selectedEdge: EgoEdge | null;
   selectedNode: SelectedNode | null;
+  expansions: Expansion[];
   setAnchor: (a: Anchor | null) => void;
   setQuarterOrd: (q: number) => void;
   setView: (v: ViewMode) => void;
   setHops: (h: 1 | 2) => void;
   setSelectedEdge: (e: EgoEdge | null) => void;
   setSelectedNode: (n: SelectedNode | null) => void;
+  addExpansion: (e: Expansion) => void;
+  removeExpansion: (node_type: NodeType, label: string) => void;
+  clearExpansions: () => void;
 }
 
 // One side panel at a time: picking an edge closes the node panel and vice versa.
+// Expansions are scoped to the current picture: anchor/hops/view changes clear them.
 export const useStore = create<AppState>((set) => ({
   anchor: null,
   quarterOrd: null,
@@ -36,12 +51,27 @@ export const useStore = create<AppState>((set) => ({
   hops: 1,
   selectedEdge: null,
   selectedNode: null,
-  setAnchor: (anchor) => set({ anchor, selectedEdge: null, selectedNode: null, quarterOrd: null }),
+  expansions: [],
+  setAnchor: (anchor) =>
+    set({ anchor, selectedEdge: null, selectedNode: null, expansions: [], quarterOrd: null }),
   setQuarterOrd: (quarterOrd) => set({ quarterOrd }),
-  setView: (view) => set({ view }),
-  setHops: (hops) => set({ hops }),
+  setView: (view) => set({ view, expansions: [] }),
+  setHops: (hops) => set({ hops, expansions: [] }),
   setSelectedEdge: (selectedEdge) =>
     set(selectedEdge ? { selectedEdge, selectedNode: null } : { selectedEdge }),
   setSelectedNode: (selectedNode) =>
     set(selectedNode ? { selectedNode, selectedEdge: null } : { selectedNode }),
+  addExpansion: (e) =>
+    set((s) => {
+      const dup = s.expansions.some(
+        (x) => x.node_type === e.node_type && x.label === e.label);
+      if (dup || s.expansions.length >= MAX_EXPANSIONS) return s;
+      return { expansions: [...s.expansions, e] };
+    }),
+  removeExpansion: (node_type, label) =>
+    set((s) => ({
+      expansions: s.expansions.filter(
+        (x) => !(x.node_type === node_type && x.label === label)),
+    })),
+  clearExpansions: () => set({ expansions: [], selectedNode: null, selectedEdge: null }),
 }));

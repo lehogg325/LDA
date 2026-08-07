@@ -112,13 +112,16 @@ function circularMean(entries: { angle: number; weight: number }[]): { angle: nu
   return { angle: Math.atan2(sy / sw, sx / sw), r: Math.hypot(sx / sw, sy / sw) };
 }
 
-export function orbitLayout(
-  union: OrbitUnion, anchorType: NodeType, anchorKeys: Set<string>,
-): Positions {
-  const nodeKeys = union.nodes;
-  const has = (k: string) => nodeKeys.has(k);
+export interface OrbitResult {
+  positions: Positions;
+  /** Graph-radian angle per placed node (the center anchor deliberately has none —
+   * it must never serve as an attachment parent). Needed by orbitAttach. */
+  angles: Map<string, number>;
+}
 
-  // ── Phase 0: deterministic aggregates over the raw per-quarter edges ──────────
+// ── Phase 0 (shared): deterministic aggregates over the raw per-quarter edges ────
+function pairAggregates(union: OrbitUnion) {
+  const has = (k: string) => union.nodes.has(k);
   const allEdges: EgoEdge[] = [];
   for (const q of [...union.quarters].sort((a, b) => a - b)) {
     const d = union.byQuarter.get(q);
@@ -157,6 +160,63 @@ export function orbitLayout(
     }
     return out.sort((x, y) => y.count - x.count || y.amount - x.amount || x.partner.localeCompare(y.partner));
   };
+
+  return { paired, uuidRegistrant, entityAttractorRaw };
+}
+
+type Paired = ReturnType<typeof pairAggregates>["paired"];
+
+// ── Phase 5 + orphan ring (shared): attach unplaced keys to their strongest placed
+// partner, in normalized units. Mutates positions/angleOf for NEW keys only. ──────
+function attachUnplaced(
+  nodeKeys: OrbitUnion["nodes"],
+  paired: Paired,
+  positions: Positions,
+  angleOf: Map<string, number>,
+): void {
+  const unplaced = () => [...nodeKeys.keys()].filter((k) => !(k in positions)).sort();
+  for (let pass = 0; pass < 3; pass++) {
+    const todo = unplaced();
+    if (todo.length === 0) break;
+    for (const key of todo) {
+      const partners = paired(key).filter((p) => p.partner in positions && angleOf.has(p.partner));
+      if (partners.length === 0) continue;
+      const parent = partners[0].partner;
+      const baseAngle = angleOf.get(parent)!;
+      const spread = (jitter01(key, "spread") - 0.5) * 0.5;
+      const ntype = nodeKeys.get(key)!.node_type;
+      const parentType = nodeKeys.get(parent)!.node_type;
+      const r = ntype === "client" && parentType === "gov_entity" ? R_COTARGET
+        : ntype === "client" ? R_EXTRA_CLIENT
+        : ntype === "gov_entity" ? R_ENTITIES
+        : ntype === "lobbyist" ? R_OWNERS + 0.14
+        : R_EXTRA_CLIENT;
+      positions[key] = onCircle(r, ((Math.PI / 2 - baseAngle) % TAU + TAU) % TAU + spread);
+      angleOf.set(key, baseAngle - spread);
+    }
+  }
+  // True orphans (also unaffiliated lobbyists with no placed partner)
+  for (const key of unplaced()) {
+    positions[key] = onCircle(R_ORPHAN, jitter01(key, "orphan") * TAU);
+  }
+}
+
+// ── Phase 6 (shared): epsilon de-dup + scale, applied per key ─────────────────────
+function jitterScale(keys: Iterable<string>, positions: Positions): void {
+  for (const key of keys) {
+    positions[key] = {
+      x: (positions[key].x + (jitter01(key, "ex") - 0.5) * 0.004) * SCALE,
+      y: (positions[key].y + (jitter01(key, "ey") - 0.5) * 0.004) * SCALE,
+    };
+  }
+}
+
+export function orbitLayout(
+  union: OrbitUnion, anchorType: NodeType, anchorKeys: Set<string>,
+): OrbitResult {
+  const nodeKeys = union.nodes;
+  const has = (k: string) => nodeKeys.has(k);
+  const { paired, uuidRegistrant, entityAttractorRaw } = pairAggregates(union);
 
   // ── Tier classification ────────────────────────────────────────────────────────
   const byType = (t: string) =>
@@ -317,38 +377,25 @@ export function orbitLayout(
   }
 
   // ── Phase 5: everything unplaced — attach to strongest placed partner ──────────
-  const unplaced = () => [...nodeKeys.keys()].filter((k) => !(k in positions)).sort();
-  for (let pass = 0; pass < 3; pass++) {
-    const todo = unplaced();
-    if (todo.length === 0) break;
-    for (const key of todo) {
-      const partners = paired(key).filter((p) => p.partner in positions && angleOf.has(p.partner));
-      if (partners.length === 0) continue;
-      const parent = partners[0].partner;
-      const baseAngle = angleOf.get(parent)!;
-      const spread = (jitter01(key, "spread") - 0.5) * 0.5;
-      const ntype = nodeKeys.get(key)!.node_type;
-      const parentType = nodeKeys.get(parent)!.node_type;
-      const r = ntype === "client" && parentType === "gov_entity" ? R_COTARGET
-        : ntype === "client" ? R_EXTRA_CLIENT
-        : ntype === "gov_entity" ? R_ENTITIES
-        : ntype === "lobbyist" ? R_OWNERS + 0.14
-        : R_EXTRA_CLIENT;
-      positions[key] = onCircle(r, ((Math.PI / 2 - baseAngle) % TAU + TAU) % TAU + spread);
-      angleOf.set(key, baseAngle - spread);
-    }
-  }
-  // True orphans (also unaffiliated lobbyists with no placed partner)
-  for (const key of unplaced()) {
-    positions[key] = onCircle(R_ORPHAN, jitter01(key, "orphan") * TAU);
-  }
+  attachUnplaced(nodeKeys, paired, positions, angleOf);
 
   // ── Phase 6: epsilon de-dup + scale ────────────────────────────────────────────
-  for (const key of Object.keys(positions)) {
-    positions[key] = {
-      x: (positions[key].x + (jitter01(key, "ex") - 0.5) * 0.004) * SCALE,
-      y: (positions[key].y + (jitter01(key, "ey") - 0.5) * 0.004) * SCALE,
-    };
-  }
+  jitterScale(Object.keys(positions), positions);
+  return { positions, angles: angleOf };
+}
+
+/** Incremental placement for node expansions: keys already in `frozen` pass through
+ * BIT-IDENTICAL (mental-map preservation — expanding never moves what's on screen);
+ * only new keys are placed, via the same Phase-5 attachment + orphan ring + jitter,
+ * using pair aggregates recomputed over the merged union. Frozen coordinates are
+ * used for membership only, never read numerically — attachment works on angles. */
+export function orbitAttach(union: OrbitUnion, frozen: OrbitResult): Positions {
+  const newKeys = [...union.nodes.keys()].filter((k) => !(k in frozen.positions));
+  if (newKeys.length === 0) return frozen.positions;
+  const { paired } = pairAggregates(union);
+  const positions: Positions = { ...frozen.positions };
+  const angleOf = new Map(frozen.angles);
+  attachUnplaced(union.nodes, paired, positions, angleOf);
+  jitterScale(newKeys, positions);
   return positions;
 }

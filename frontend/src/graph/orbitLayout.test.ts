@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EgoEdge, EgoResponse, NodeType } from "../api/client";
-import { orbitLayout, type OrbitUnion } from "./orbitLayout";
+import { orbitAttach, orbitLayout, type OrbitUnion } from "./orbitLayout";
 
 const edge = (
   etype: EgoEdge["edge_type"], st: NodeType, sid: number, tt: NodeType, tid: number,
@@ -53,7 +53,7 @@ const radius = (p: { x: number; y: number }) => Math.hypot(p.x, p.y) / 100;
 
 describe("orbitLayout — company anchor", () => {
   const { union, anchors } = makeUnion();
-  const pos = orbitLayout(union, "client", anchors);
+  const pos = orbitLayout(union, "client", anchors).positions;
 
   it("places every node", () => {
     expect(Object.keys(pos).sort()).toEqual([...union.nodes.keys()].sort());
@@ -91,13 +91,13 @@ describe("orbitLayout — company anchor", () => {
   });
 
   it("is deterministic and edge-order-invariant", () => {
-    const again = orbitLayout(union, "client", anchors);
+    const again = orbitLayout(union, "client", anchors).positions;
     expect(again).toEqual(pos);
 
     const { union: u2, anchors: a2 } = makeUnion();
     const ego = u2.byQuarter.get(20231)!;
     ego.edges.reverse();
-    expect(orbitLayout(u2, "client", a2)).toEqual(pos);
+    expect(orbitLayout(u2, "client", a2).positions).toEqual(pos);
   });
 
   it("no two nodes share coordinates", () => {
@@ -117,7 +117,7 @@ describe("orbitLayout — capacity and other anchors", () => {
     }
     const ego: EgoResponse = { nodes: [], edges, truncated: false, dropped: [], year: 2023, period: "first_quarter" };
     const pos = orbitLayout(
-      { nodes, quarters: [1], byQuarter: new Map([[1, ego]]) }, "client", new Set(["client:1"]));
+      { nodes, quarters: [1], byQuarter: new Map([[1, ego]]) }, "client", new Set(["client:1"])).positions;
     const radii = Array.from({ length: 150 }, (_, i) => radius(pos[`registrant:${i}`]));
     expect(Math.min(...radii)).toBeGreaterThan(0.3);
     expect(Math.max(...radii)).toBeLessThan(0.75);
@@ -136,7 +136,7 @@ describe("orbitLayout — capacity and other anchors", () => {
     const ego: EgoResponse = { nodes: [], edges, truncated: false, dropped: [], year: 2023, period: "first_quarter" };
     const pos = orbitLayout(
       { nodes, quarters: [1], byQuarter: new Map([[1, ego]]) }, "client",
-      new Set(["client:1", "client:2"]));
+      new Set(["client:1", "client:2"])).positions;
     expect(radius(pos["client:1"])).toBeLessThan(0.1);
     expect(radius(pos["client:2"])).toBeLessThan(0.1);
     expect(pos["client:1"]).not.toEqual(pos["client:2"]);
@@ -152,12 +152,80 @@ describe("orbitLayout — capacity and other anchors", () => {
     }
     const ego: EgoResponse = { nodes: [], edges, truncated: false, dropped: [], year: 2023, period: "first_quarter" };
     const pos = orbitLayout(
-      { nodes, quarters: [1], byQuarter: new Map([[1, ego]]) }, "gov_entity", new Set(["gov_entity:500"]));
+      { nodes, quarters: [1], byQuarter: new Map([[1, ego]]) }, "gov_entity", new Set(["gov_entity:500"])).positions;
     expect(radius(pos["gov_entity:500"])).toBeLessThan(0.1);
     for (let i = 0; i < 40; i++) {
       const r = radius(pos[`client:${i}`]);
       expect(r).toBeGreaterThan(0.3);
       expect(r).toBeLessThan(0.85);
     }
+  });
+});
+
+describe("orbitAttach — incremental expansion placement", () => {
+  const { union, anchors } = makeUnion();
+  const base = orbitLayout(union, "client", anchors);
+
+  /** Merged union: BIG FIRM (registrant:10) expanded — two new clients + one new
+   * gov entity arrive via its filings. */
+  function mergedUnion(reversed = false): OrbitUnion {
+    const nodes = new Map(union.nodes);
+    nodes.set("client:70", { size: 2, label: "NEW CO A", node_type: "client", node_id: 70 });
+    nodes.set("client:71", { size: 2, label: "NEW CO B", node_type: "client", node_id: 71 });
+    nodes.set("gov_entity:502", { size: 2, label: "FTC", node_type: "gov_entity", node_id: 502 });
+    const extra: EgoEdge[] = [
+      edge("represents", "registrant", 10, "client", 70, "x1", 200000),
+      edge("represents", "registrant", 10, "client", 71, "x2", 90000),
+      edge("targeted", "client", 70, "gov_entity", 502, "x1"),
+    ];
+    const baseEgo = union.byQuarter.get(20231)!;
+    const edges = [...baseEgo.edges, ...(reversed ? [...extra].reverse() : extra)];
+    return { nodes, quarters: [20231], byQuarter: new Map([[20231, { ...baseEgo, edges }]]) };
+  }
+
+  const pos = orbitAttach(mergedUnion(), base);
+
+  it("frozen keys pass through bit-identical", () => {
+    for (const k of Object.keys(base.positions)) {
+      expect(pos[k]).toBe(base.positions[k]);
+    }
+  });
+
+  it("places every new key", () => {
+    expect(Object.keys(pos).sort()).toEqual([...mergedUnion().nodes.keys()].sort());
+  });
+
+  it("new clients attach near their firm's angle at the extra-client band", () => {
+    const angle = (p: { x: number; y: number }) => Math.atan2(p.y, p.x);
+    for (const k of ["client:70", "client:71"]) {
+      const r = radius(pos[k]);
+      expect(r).toBeGreaterThan(0.5);
+      expect(r).toBeLessThan(0.85);
+      const diff = Math.abs(angle(pos[k]) - angle(pos["registrant:10"])) % (2 * Math.PI);
+      expect(Math.min(diff, 2 * Math.PI - diff)).toBeLessThan(0.5);
+    }
+  });
+
+  it("is deterministic and edge-order-invariant", () => {
+    expect(orbitAttach(mergedUnion(), base)).toEqual(pos);
+    expect(orbitAttach(mergedUnion(true), base)).toEqual(pos);
+  });
+
+  it("returns the frozen positions object untouched when nothing is new", () => {
+    expect(orbitAttach(union, base)).toBe(base.positions);
+  });
+
+  it("never attaches to the anchor (it has no angle by design)", () => {
+    // A node connected ONLY to the anchor must fall to the orphan ring, not to a
+    // junk angle derived from the anchor's jittered origin.
+    const nodes = new Map(union.nodes);
+    nodes.set("registrant:99", { size: 2, label: "ONLY-ANCHOR", node_type: "registrant", node_id: 99 });
+    const baseEgo = union.byQuarter.get(20231)!;
+    const edges = [...baseEgo.edges, edge("represents", "registrant", 99, "client", 1, "z1", 5)];
+    const merged: OrbitUnion = {
+      nodes, quarters: [20231], byQuarter: new Map([[20231, { ...baseEgo, edges }]]),
+    };
+    const p = orbitAttach(merged, base);
+    expect(radius(p["registrant:99"])).toBeGreaterThan(1.3); // orphan ring
   });
 });

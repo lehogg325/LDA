@@ -19,9 +19,13 @@ export default function App() {
   const setView = useStore((s) => s.setView);
   const setHops = useStore((s) => s.setHops);
   const setAnchor = useStore((s) => s.setAnchor);
+  const expansions = useStore((s) => s.expansions);
+  const clearExpansions = useStore((s) => s.clearExpansions);
 
-  const { timeline, presenceQuarters, loadedQuarters, failedQuarters, union, positions, isLoading } =
-    useEgoWindow(anchor, hops, view);
+  const { timeline, presenceQuarters, loadedQuarters, failedQuarters, union, positions,
+          expansionInfo, isLoading } = useEgoWindow(anchor, hops, view, expansions);
+  const expPending = expansionInfo.filter((i) => i.state === "adding").length;
+  const expRefused = expansionInfo.some((i) => i.state === "too-large");
 
   // Default the slider to the latest quarter in the window once loaded.
   useEffect(() => {
@@ -81,11 +85,19 @@ export default function App() {
               <span className="loading"> loading window… {loadedQuarters}/{presenceQuarters.length} quarters
                 {failedQuarters > 0 && ` (${failedQuarters} failed — retrying)`}</span>
             )}
+            {expansions.length > 0 && (
+              <span className="note expansions-chip">
+                {" "}· {expansions.length} expansion{expansions.length > 1 ? "s" : ""}
+                {expPending > 0 && ` (adding ${expPending}…)`}
+                {expRefused && <em title="An expansion was too large for the graph budget"> ⚠</em>}
+                <button onClick={clearExpansions} title="Remove all added connections">clear</button>
+              </span>
+            )}
           </div>
           <TruncationBanner ego={currentEgo} />
           <div className="main-row">
             <GraphView union={union} positions={positions} />
-            <NodePanel />
+            <NodePanel expansionInfo={expansionInfo} />
             <DebugPanel />
           </div>
           <LegendBar />

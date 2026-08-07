@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EgoEdge, EgoNode, EgoResponse, NodeType } from "../api/client";
-import { makeCollapse, superKeyOf, toDisplaySpace } from "./collapse";
+import { makeCollapse, mergeQuarter, superKeyOf, toDisplaySpace } from "./collapse";
 
 const node = (t: NodeType, id: number, degree: number | null, extra: Partial<EgoNode> = {}): EgoNode => ({
   node_type: t, node_id: id, label: `${t}-${id}`, is_anchor: false,
@@ -101,5 +101,82 @@ describe("toDisplaySpace", () => {
     const d = toDisplaySpace(r, c);
     expect(d.dropped).toBe(r.dropped);
     expect(d.year).toBe(2023);
+  });
+});
+
+describe("mergeQuarter", () => {
+  const anchor = { node_type: "client" as const, ids: [1, 2], label: "ACME" };
+  const c = makeCollapse(anchor);
+
+  const anchorDisplay = toDisplaySpace(
+    resp(
+      [node("client", 1, 3, { is_anchor: true }), node("client", 2, 2, { is_anchor: true }),
+       node("registrant", 10, 4)],
+      [edge("client", 1, "gov_entity", 500, "f1"),
+       { ...edge("registrant", 10, "client", 1, "f2"), edge_type: "represents" } as EgoEdge],
+    ), c);
+
+  it("returns the anchor response untouched when there are no expansions", () => {
+    expect(mergeQuarter(anchorDisplay, [], c)).toBe(anchorDisplay);
+  });
+
+  it("dedups anchor↔expansion duplicate edges by RAW identity", () => {
+    // Expanding registrant:10 re-surfaces the same represents filing f2 (raw endpoint
+    // client:1) plus a new client of its own.
+    const exp = resp(
+      [node("registrant", 10, 4, { is_anchor: true }), node("client", 1, 3), node("client", 70, 1)],
+      [{ ...edge("registrant", 10, "client", 1, "f2"), edge_type: "represents" } as EgoEdge,
+       { ...edge("registrant", 10, "client", 70, "x1"), edge_type: "represents" } as EgoEdge],
+    );
+    const m = mergeQuarter(anchorDisplay, [{ resp: exp, memberKeys: new Set(["registrant:10"]) }], c);
+    const f2 = m.edges.filter((e) => e.filing_uuid === "f2");
+    expect(f2).toHaveLength(1);
+    expect(m.edges.filter((e) => e.filing_uuid === "x1")).toHaveLength(1);
+    expect(m.nodes.some((n) => n.node_type === "client" && n.node_id === 70)).toBe(true);
+  });
+
+  it("preserves a group anchor's same-uuid member pair (display-identical, raw-distinct)", () => {
+    // One filing naming both members via different raw endpoints must keep BOTH rows
+    // (their display signature is identical — raw identity is what distinguishes them).
+    const disp = toDisplaySpace(
+      resp(
+        [node("client", 1, 1, { is_anchor: true }), node("client", 2, 1, { is_anchor: true }),
+         node("gov_entity", 500, 2)],
+        [edge("client", 1, "gov_entity", 500, "fx"), edge("client", 2, "gov_entity", 500, "fx")],
+      ), c);
+    const m = mergeQuarter(disp, [{
+      resp: resp([node("registrant", 10, 1, { is_anchor: true })], []),
+      memberKeys: new Set(["registrant:10"]),
+    }], c);
+    expect(m.edges.filter((e) => e.filing_uuid === "fx")).toHaveLength(2);
+  });
+
+  it("strips is_anchor from expansion rows; the anchor's own rows win", () => {
+    const exp = resp(
+      [node("registrant", 10, 9, { is_anchor: true, label: "EXPANDED LABEL" }),
+       node("client", 1, 3, { is_anchor: true })],
+      [{ ...edge("registrant", 10, "client", 1, "f9"), edge_type: "represents" } as EgoEdge],
+    );
+    const m = mergeQuarter(anchorDisplay, [{ resp: exp, memberKeys: new Set(["registrant:10"]) }], c);
+    const anchors = m.nodes.filter((n) => n.is_anchor);
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0].node_id).toBe(1); // the collapsed anchor row, from the anchor response
+    const reg = m.nodes.find((n) => n.node_type === "registrant" && n.node_id === 10)!;
+    expect(reg.label).toBe("registrant-10"); // anchor response's row won
+  });
+
+  it("drops the expansion's seeded row in its inactive quarters", () => {
+    const exp = resp([node("registrant", 77, null, { is_anchor: true })], []);
+    const m = mergeQuarter(anchorDisplay, [{ resp: exp, memberKeys: new Set(["registrant:77"]) }], c);
+    expect(m.nodes.some((n) => n.node_id === 77)).toBe(false);
+  });
+
+  it("keeps the anchor's truncation signal only", () => {
+    const exp = resp([node("registrant", 77, 1, { is_anchor: true })], []);
+    exp.truncated = true;
+    exp.dropped = [{ node_type: "registrant", node_id: 77, dropped_neighbors: 400 }];
+    const m = mergeQuarter(anchorDisplay, [{ resp: exp, memberKeys: new Set(["registrant:77"]) }], c);
+    expect(m.truncated).toBe(false);
+    expect(m.dropped).toHaveLength(0);
   });
 });

@@ -5,7 +5,8 @@
 
 import { useEffect, useState } from "react";
 import { api, periodLabel, type NodeActivities } from "../api/client";
-import { useStore } from "../state/store";
+import type { ExpansionInfo } from "../graph/useEgoWindow";
+import { MAX_EXPANSIONS, useStore } from "../state/store";
 
 const TYPE_LABEL: Record<string, string> = {
   registrant: "Registrant", client: "Client", lobbyist: "Lobbyist", gov_entity: "Gov entity",
@@ -14,13 +15,17 @@ const TYPE_LABEL: Record<string, string> = {
 const PERIODS_BY_DIGIT = ["", "first_quarter", "second_quarter", "third_quarter",
                           "fourth_quarter", "mid_year", "year_end"];
 
-export function NodePanel() {
+export function NodePanel({ expansionInfo }: { expansionInfo?: ExpansionInfo[] }) {
   const node = useStore((s) => s.selectedNode);
   const anchor = useStore((s) => s.anchor);
   const quarterOrd = useStore((s) => s.quarterOrd);
   const view = useStore((s) => s.view);
   const setSelectedNode = useStore((s) => s.setSelectedNode);
+  const expansions = useStore((s) => s.expansions);
+  const addExpansion = useStore((s) => s.addExpansion);
+  const removeExpansion = useStore((s) => s.removeExpansion);
   const [data, setData] = useState<NodeActivities | null>(null);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
     setData(null);
@@ -41,6 +46,32 @@ export function NodePanel() {
     ? `${Math.floor(quarterOrd / 10)} ${periodLabel(PERIODS_BY_DIGIT[quarterOrd % 10])}`
     : "";
 
+  // Expansion controls: hidden for the anchor (its connections ARE the graph).
+  const isAnchor = anchor !== null && node.node_type === anchor.node_type
+    && node.node_id === Math.min(...anchor.ids);
+  const expanded = expansions.some(
+    (x) => x.node_type === node.node_type && x.label === node.label);
+  const info = expansionInfo?.find(
+    (i) => i.node_type === node.node_type && i.label === node.label);
+  const atCap = expansions.length >= MAX_EXPANSIONS;
+
+  const expand = async () => {
+    setResolving(true);
+    let ids = [node.node_id];
+    try {
+      if (node.node_type === "client" || node.node_type === "lobbyist") {
+        // These IDs are registration-scoped; resolve the exact-name group so the
+        // expansion covers the entity's whole network, not one registration's slice.
+        const r = await api.search(node.label);
+        const hit = r.results.find(
+          (h) => h.node_type === node.node_type && h.label === node.label);
+        if (hit) ids = hit.ids;
+      }
+    } catch { /* fall back to the single id */ }
+    addExpansion({ node_type: node.node_type, ids, label: node.label });
+    setResolving(false);
+  };
+
   return (
     <aside className="debug-panel node-panel">
       <header>
@@ -48,6 +79,23 @@ export function NodePanel() {
         <button onClick={() => setSelectedNode(null)}>×</button>
       </header>
       <h3 className="node-title">{node.label}</h3>
+      {!isAnchor && (expanded ? (
+        <p className="expand-row">
+          {info?.state === "too-large" ? <em>⚠ too large to add — graph budget</em>
+            : info?.state === "adding" ? <em>adding connections…</em>
+            : <em>✓ connections in graph{info?.truncated ? " (server-capped)" : ""}</em>}
+          <button onClick={() => removeExpansion(node.node_type, node.label)}>remove</button>
+        </p>
+      ) : (
+        <button
+          className="expand-btn"
+          disabled={resolving || atCap}
+          title={atCap ? `Limit of ${MAX_EXPANSIONS} expansions — remove some first` : undefined}
+          onClick={expand}
+        >
+          {resolving ? "resolving…" : "⊕ Add connections to graph"}
+        </button>
+      ))}
       <h4>
         Issues lobbied ({quarter}{view === "original" ? ", as filed" : ""})
         {data && data.n_filings > 0 && ` · ${data.n_filings} filing${data.n_filings === 1 ? "" : "s"}`}

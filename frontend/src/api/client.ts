@@ -111,8 +111,8 @@ export interface FilingBehindEdge {
   filing_document_url: string;
 }
 
-async function get<T>(url: string): Promise<T> {
-  const r = await fetch(url);
+async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const r = await fetch(url, { signal });
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
   return r.json() as Promise<T>;
 }
@@ -120,12 +120,22 @@ async function get<T>(url: string): Promise<T> {
 // Anchoring fetches up to ~74 quarters; unbounded parallelism stampedes serverless
 // backends (one function invocation per request) into database connection limits.
 // A small semaphore keeps the window load fast without the thundering herd.
+// Aborted requests (cleared expansions, anchor change) bail before taking a slot —
+// otherwise hundreds of dead fetches would starve the next anchor's load.
 const MAX_CONCURRENT_EGO = 6;
 let egoActive = 0;
 const egoWaiters: (() => void)[] = [];
-async function egoSlot<T>(fn: () => Promise<T>): Promise<T> {
+async function egoSlot<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  const bail = () => {
+    throw new DOMException("ego request aborted before start", "AbortError");
+  };
+  if (signal?.aborted) bail();
   if (egoActive >= MAX_CONCURRENT_EGO) {
     await new Promise<void>((resolve) => egoWaiters.push(resolve));
+    if (signal?.aborted) {
+      egoWaiters.shift()?.(); // hand the slot on before bailing
+      bail();
+    }
   }
   egoActive++;
   try {
@@ -139,10 +149,12 @@ async function egoSlot<T>(fn: () => Promise<T>): Promise<T> {
 export const api = {
   search: (q: string) =>
     get<{ results: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
-  ego: (t: NodeType, ids: number[], year: number, period: string, hops: number, view: ViewMode) =>
+  ego: (t: NodeType, ids: number[], year: number, period: string, hops: number,
+        view: ViewMode, signal?: AbortSignal) =>
     egoSlot(() => get<EgoResponse>(
       `/api/ego/${t}/${ids[0]}?ids=${ids.join(",")}&year=${year}&period=${period}&hops=${hops}&view=${view}`,
-    )),
+      signal,
+    ), signal),
   timeline: (t: NodeType, ids: number[]) =>
     get<{ quarters: TimelineQuarter[] }>(`/api/timeline/${t}/${ids[0]}?ids=${ids.join(",")}`),
   meta: () => get<Meta>("/api/meta"),

@@ -91,3 +91,61 @@ export function toDisplaySpace(resp: EgoResponse, c: DisplayCollapse): EgoRespon
   // dropped[] passes through untouched: only its dropped_neighbors counts are read.
   return { ...resp, nodes, edges };
 }
+
+/** One quarter's slice of an expansion: the RAW ego response for the expanded node
+ * plus the expansion's own queried keys (needed to drop its seeded row in quarters
+ * where it had no activity). */
+export interface ExpansionSlice {
+  resp: EgoResponse;
+  memberKeys: Set<string>;
+}
+
+// Edge identity over RAW (pre-collapse) endpoints — matches the backend's own edge
+// key (edge_type, src, dst, filing_uuid). Display-space identity would be wrong: a
+// group anchor legitimately carries two member edges with the same display signature
+// and uuid, and deduping those would halve its aggregated amounts.
+const rawEdgeId = (e: EgoEdge) => {
+  const s = e.orig_source ?? e.source;
+  const t = e.orig_target ?? e.target;
+  return `${e.edge_type}|${s.node_type}:${s.node_id}|${t.node_type}:${t.node_id}|${e.filing_uuid}`;
+};
+
+/** Merge one quarter's expansion responses into the anchor's display-space response.
+ * Pure. Dedup rules (order matters):
+ * - every expansion response goes through toDisplaySpace first (its edges can touch
+ *   anchor members), THEN loses its is_anchor marks (the backend flags whatever node
+ *   it was queried for, and toDisplaySpace synthesizes an anchor-marked row);
+ * - node rows dedup by key, the anchor response's row winning;
+ * - edges dedup by raw identity (kills anchor↔expansion duplicates that would
+ *   double-count amounts in the per-quarter aggregation);
+ * - an expansion's own seeded row is dropped in quarters where it has no metrics and
+ *   no incident edge, so the expanded node hides instead of floating disconnected;
+ * - truncated/dropped keep the ANCHOR's values (the truncation banner's advice would
+ *   mislead for expansion-caused truncation — that surfaces on the expansions chip).
+ */
+export function mergeQuarter(
+  anchorDisplay: EgoResponse,
+  expansions: ExpansionSlice[],
+  c: DisplayCollapse,
+): EgoResponse {
+  if (expansions.length === 0) return anchorDisplay;
+  const nodes = new Map(anchorDisplay.nodes.map((n) => [nodeKey(n.node_type, n.node_id), n]));
+  const edges = new Map(anchorDisplay.edges.map((e) => [rawEdgeId(e), e]));
+  for (const { resp, memberKeys } of expansions) {
+    const d = toDisplaySpace(resp, c);
+    const touched = new Set<string>();
+    for (const e of d.edges) {
+      const id = rawEdgeId(e);
+      if (!edges.has(id)) edges.set(id, e);
+      touched.add(nodeKey(e.source.node_type, e.source.node_id));
+      touched.add(nodeKey(e.target.node_type, e.target.node_id));
+    }
+    for (const n of d.nodes) {
+      const k = nodeKey(n.node_type, n.node_id);
+      if (nodes.has(k)) continue; // anchor row (incl. the collapsed super-row) wins
+      if (memberKeys.has(k) && n.metrics == null && !touched.has(k)) continue;
+      nodes.set(k, n.is_anchor ? { ...n, is_anchor: false } : n);
+    }
+  }
+  return { ...anchorDisplay, nodes: [...nodes.values()], edges: [...edges.values()] };
+}
