@@ -11,8 +11,19 @@ export function SearchBox() {
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [open, setOpen] = useState(false);
   const setAnchor = useStore((s) => s.setAnchor);
+  const anchor = useStore((s) => s.anchor);
   const timer = useRef<number | undefined>(undefined);
   const suppressSearch = useRef(false);
+
+  // Masthead click (or anything else) clearing the anchor returns to the landing
+  // page — the box should not keep showing the previous company.
+  useEffect(() => {
+    if (anchor === null) {
+      setQ("");
+      setHits([]);
+      setOpen(false);
+    }
+  }, [anchor]);
 
   useEffect(() => {
     if (suppressSearch.current) { suppressSearch.current = false; return; }

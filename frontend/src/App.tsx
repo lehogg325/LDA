@@ -17,6 +17,7 @@ export default function App() {
   const setQuarterOrd = useStore((s) => s.setQuarterOrd);
   const setView = useStore((s) => s.setView);
   const setHops = useStore((s) => s.setHops);
+  const setAnchor = useStore((s) => s.setAnchor);
 
   const { timeline, presenceQuarters, loadedQuarters, failedQuarters, union, positions, isLoading } =
     useEgoWindow(anchor, hops, view);
@@ -33,10 +34,15 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="masthead">
+        <a
+          className="masthead"
+          href="/"
+          title="Back to start"
+          onClick={(e) => { e.preventDefault(); setAnchor(null); }}
+        >
           <span className="kicker">Lobbying Disclosure Act · 2008 – Present</span>
           <h1>The Lobbying Network</h1>
-        </div>
+        </a>
         <SearchBox />
         <div className="controls">
           <label>
