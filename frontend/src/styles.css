@@ -312,7 +312,6 @@ select {
 .legend .sep { flex: 0 0 12px; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
 .sw { display: inline-block; width: 14px; height: 5px; margin-right: 5px; border-radius: 1px; }
-.sw.line { background: var(--lunar); height: 2px; }
 
 /* ── Quarter slider ───────────────────────────────────────────────────── */
 .quarter-slider { display: flex; align-items: center; gap: 14px; padding: 10px 22px; }

@@ -20,9 +20,15 @@ export function QuarterSlider({ quarters }: { quarters: number[] }) {
       const i = cur !== null ? quarters.indexOf(cur) : -1;
       if (i < 0 || i >= quarters.length - 1) setPlaying(false);
       else setQuarterOrd(quarters[i + 1]);
-    }, 900);
+    }, 750);
     return () => window.clearInterval(playRef.current);
   }, [playing, quarters, setQuarterOrd]);
+
+  // Play tells the whole story: rewind to the first quarter, then one step per tick.
+  const play = () => {
+    setQuarterOrd(quarters[0]);
+    setPlaying(true);
+  };
 
   if (quarters.length === 0 || quarterOrd === null) return null;
   const label = (ord: number) =>
@@ -30,7 +36,7 @@ export function QuarterSlider({ quarters }: { quarters: number[] }) {
 
   return (
     <div className="quarter-slider">
-      <button onClick={() => setPlaying(!playing)} title="Play through quarters">
+      <button onClick={() => (playing ? setPlaying(false) : play())} title="Play from the beginning">
         {playing ? "⏸" : "▶"}
       </button>
       <input

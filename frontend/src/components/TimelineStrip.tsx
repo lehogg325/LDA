@@ -1,4 +1,4 @@
-// Clickable strip below the graph: the anchor's degree and reported money by quarter.
+// Clickable strip below the graph: the anchor's reported money by quarter.
 // Income and expenses are separate series — never stacked into one figure (spec).
 
 import type { TimelineQuarter } from "../api/client";
@@ -13,13 +13,7 @@ export function TimelineStrip({ quarters }: { quarters: TimelineQuarter[] }) {
 
   const bw = (W - 2 * PAD) / quarters.length;
   const maxMoney = Math.max(1, ...quarters.map((q) => Math.max(q.total_income ?? 0, q.total_expenses ?? 0)));
-  const maxDegree = Math.max(1, ...quarters.map((q) => q.degree));
   const moneyH = (v: number | null) => ((v ?? 0) / maxMoney) * (H - 30);
-  const degY = (v: number) => H - 22 - (v / maxDegree) * (H - 30);
-
-  const degreePath = quarters
-    .map((q, i) => `${i === 0 ? "M" : "L"}${PAD + i * bw + bw / 2},${degY(q.degree)}`)
-    .join(" ");
 
   return (
     <div className="timeline-strip">
@@ -49,12 +43,10 @@ export function TimelineStrip({ quarters }: { quarters: TimelineQuarter[] }) {
             )}
           </g>
         ))}
-        <path d={degreePath} fill="none" stroke="#F5F2EC" strokeWidth={1.1} opacity={0.75} />
       </svg>
       <div className="strip-legend">
         <span><i className="sw" style={{ background: "#FF4F00" }} /> reported income</span>
         <span><i className="sw" style={{ background: "#4997D0" }} /> reported expenses</span>
-        <span><i className="sw line" /> degree</span>
       </div>
     </div>
   );
