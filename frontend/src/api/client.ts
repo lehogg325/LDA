@@ -43,6 +43,15 @@ export interface EgoEdge {
   is_superseded: boolean;
   /** Client-side only: how many parallel edges were aggregated into this one. */
   agg_count?: number;
+  /** Client-side only: same-amount_type sum across the aggregated edges. */
+  agg_amount?: number;
+  /** Client-side only: pre-collapse endpoints (name-group anchors render as one
+   * node, but the underlying registration-scoped IDs stay distinct). */
+  orig_source?: { node_type: NodeType; node_id: number };
+  orig_target?: { node_type: NodeType; node_id: number };
+  /** Client-side only: distinct underlying endpoint ids behind an aggregated edge. */
+  source_ids?: number[];
+  target_ids?: number[];
 }
 
 export interface EgoResponse {
@@ -116,11 +125,18 @@ export const api = {
   timeline: (t: NodeType, ids: number[]) =>
     get<{ quarters: TimelineQuarter[] }>(`/api/timeline/${t}/${ids[0]}?ids=${ids.join(",")}`),
   meta: () => get<Meta>("/api/meta"),
-  edgeFilings: (e: EgoEdge, year: number, period: string) =>
-    get<{ filings: FilingBehindEdge[] }>(
-      `/api/edge-filings?source_type=${e.source.node_type}&source_id=${e.source.node_id}` +
-        `&target_type=${e.target.node_type}&target_id=${e.target.node_id}&year=${year}&period=${period}`,
-    ),
+  edgeFilings: (e: EgoEdge, year: number, period: string) => {
+    // A display edge may aggregate several registration-scoped IDs (a name-group
+    // anchor collapses to one node); the backend accepts CSV id lists for that.
+    const sIds = e.source_ids?.length ? e.source_ids : [e.source.node_id];
+    const tIds = e.target_ids?.length ? e.target_ids : [e.target.node_id];
+    return get<{ filings: FilingBehindEdge[] }>(
+      `/api/edge-filings?source_type=${e.source.node_type}&source_id=${sIds[0]}` +
+        `&source_ids=${sIds.join(",")}` +
+        `&target_type=${e.target.node_type}&target_id=${tIds[0]}` +
+        `&target_ids=${tIds.join(",")}&year=${year}&period=${period}`,
+    );
+  },
 };
 
 export const PERIODS = ["first_quarter", "second_quarter", "third_quarter", "fourth_quarter"];

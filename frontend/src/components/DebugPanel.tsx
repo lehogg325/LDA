@@ -29,7 +29,17 @@ export function DebugPanel() {
         </span>
         <button onClick={() => setSelectedEdge(null)}>×</button>
       </header>
-      {edge.amount !== null && (
+      {(edge.agg_count ?? 1) > 1 && (edge.agg_amount ?? 0) > 0 && edge.amount_type !== null ? (
+        // Aggregated display edge: one representative's amount would mislead — show
+        // the same-type sum (income and expenses are never mixed).
+        <p className="money">
+          ${edge.agg_amount!.toLocaleString()}{" "}
+          <em>
+            ({edge.amount_type === "income" ? "reported income" : "reported expenses"} summed
+            across {edge.agg_count} filings)
+          </em>
+        </p>
+      ) : edge.amount !== null && (
         <p className="money">
           ${edge.amount.toLocaleString()}{" "}
           <em>({edge.amount_type === "income" ? "reported income" : "reported expense"})</em>

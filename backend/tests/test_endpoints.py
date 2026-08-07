@@ -124,6 +124,32 @@ async def test_filing_debug_view(client):
     assert {f["is_current"] for f in behind["filings"]} == {True, False}
 
 
+async def test_edge_filings_accepts_id_lists(client):
+    """A collapsed name-group edge (CLIENT X CORP = ids 10 and 12, both targeting
+    SENATE in 2023 Q1) queries with CSV id lists and gets the union of both member
+    pairs' filings."""
+    single = (await client.get("/api/edge-filings", params={
+        "source_type": "client", "source_id": 10, "target_type": "gov_entity",
+        "target_id": 3, "year": 2023, "period": "first_quarter"})).json()
+    grouped = (await client.get("/api/edge-filings", params={
+        "source_type": "client", "source_id": 10, "source_ids": "10,12",
+        "target_type": "gov_entity", "target_id": 3, "target_ids": "3",
+        "year": 2023, "period": "first_quarter"})).json()
+    single_uuids = {f["filing_uuid"] for f in single["filings"]}
+    grouped_uuids = {f["filing_uuid"] for f in grouped["filings"]}
+    assert single_uuids < grouped_uuids
+    # The second member's filing (f4: FIRM A -> CLIENT X(12), reported zero) appears.
+    assert "10000000-0000-0000-0000-000000000004" in grouped_uuids
+    # Batched detail keeps document URLs intact for every filing.
+    assert all(f["filing_document_url"] for f in grouped["filings"])
+
+    bad = await client.get("/api/edge-filings", params={
+        "source_type": "client", "source_id": 10, "source_ids": "10,oops",
+        "target_type": "gov_entity", "target_id": 3,
+        "year": 2023, "period": "first_quarter"})
+    assert bad.status_code == 422
+
+
 async def test_meta_serves_disclaimer_and_quarters(client):
     r = (await client.get("/api/meta")).json()
     assert "cannot vouch" in r["disclaimer"]

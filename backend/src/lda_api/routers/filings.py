@@ -9,7 +9,7 @@ from ..db import get_pool
 
 router = APIRouter()
 
-FILING_SQL = """
+FILING_BASE_SQL = """
 SELECT f.filing_uuid::text, f.filing_type, rt.display, f.filing_year, f.filing_period,
        f.income, f.expenses, f.amount, f.amount_type, f.is_reported_zero,
        f.dt_posted, f.is_current, f.is_original, f.superseded_by::text,
@@ -19,8 +19,15 @@ FROM filings f
 JOIN ref_filing_types rt ON rt.code = f.filing_type
 JOIN registrants r ON r.id = f.registrant_id
 JOIN clients c ON c.id = f.client_id
-WHERE f.filing_uuid = %(uuid)s
 """
+
+FILING_SQL = FILING_BASE_SQL + "WHERE f.filing_uuid = %(uuid)s"
+
+FILINGS_BATCH_SQL = (
+    FILING_BASE_SQL
+    + "WHERE f.filing_uuid = ANY(%(uuids)s::uuid[]) "
+    + "ORDER BY f.is_current DESC, f.dt_posted DESC, f.filing_uuid"
+)
 
 ACTIVITIES_SQL = """
 SELECT a.activity_index, a.general_issue_code, i.display, a.description,
@@ -39,8 +46,8 @@ ORDER BY a.activity_index
 EDGE_FILINGS_SQL = """
 SELECT DISTINCT e.filing_uuid::text
 FROM edges e
-WHERE e.source_type = %(source_type)s AND e.source_id = %(source_id)s
-  AND e.target_type = %(target_type)s AND e.target_id = %(target_id)s
+WHERE e.source_type = %(source_type)s AND e.source_id = ANY(%(source_ids)s)
+  AND e.target_type = %(target_type)s AND e.target_id = ANY(%(target_ids)s)
   AND e.filing_year = %(year)s AND e.filing_period = %(period)s
 """
 
@@ -71,24 +78,42 @@ async def filing_detail(filing_uuid: str):
     }
 
 
+def _csv_ids(csv: str | None, fallback: int) -> list[int]:
+    if not csv:
+        return [fallback]
+    try:
+        return [int(x) for x in csv.split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(422, "ids must be a comma-separated list of integers")
+
+
 @router.get("/edge-filings")
 async def edge_filings(source_type: str = Query(), source_id: int = Query(),
                        target_type: str = Query(), target_id: int = Query(),
-                       year: int = Query(), period: str = Query()):
-    """The filings behind one rendered edge — the debug view's data source."""
+                       year: int = Query(), period: str = Query(),
+                       source_ids: str | None = Query(None),
+                       target_ids: str | None = Query(None)):
+    """The filings behind one rendered edge — the debug view's data source.
+
+    A display edge may aggregate several registration-scoped IDs (a name-group anchor
+    collapses to one node), so the optional CSV id lists widen the match. The ANY×ANY
+    cross product is exact because such aggregates are stars: one concrete node on the
+    non-anchor side, N member IDs on the anchor side.
+    """
+    s_ids = _csv_ids(source_ids, source_id)
+    t_ids = _csv_ids(target_ids, target_id)
     async with (await get_pool()).connection() as conn:
         uuids = [r[0] for r in await (await conn.execute(EDGE_FILINGS_SQL, {
-            "source_type": source_type, "source_id": source_id,
-            "target_type": target_type, "target_id": target_id,
+            "source_type": source_type, "source_ids": s_ids,
+            "target_type": target_type, "target_ids": t_ids,
             "year": year, "period": period})).fetchall()]
         details = []
-        for u in uuids:
-            row = await (await conn.execute(FILING_SQL, {"uuid": u})).fetchone()
-            if row:
-                details.append({
-                    "filing_uuid": row[0], "filing_type_display": row[2],
-                    "amount": float(row[7]) if row[7] is not None else None,
-                    "amount_type": row[8], "is_current": row[11],
-                    "filing_document_url": row[15],
-                })
+        if uuids:
+            rows = await (await conn.execute(FILINGS_BATCH_SQL, {"uuids": uuids})).fetchall()
+            details = [{
+                "filing_uuid": row[0], "filing_type_display": row[2],
+                "amount": float(row[7]) if row[7] is not None else None,
+                "amount_type": row[8], "is_current": row[11],
+                "filing_document_url": row[15],
+            } for row in rows]
     return {"filings": details}

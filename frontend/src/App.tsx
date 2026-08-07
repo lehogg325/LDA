@@ -68,7 +68,7 @@ export default function App() {
           <div className="status-row">
             <strong>{anchor.label}</strong>
             {anchor.ids.length > 1 && (
-              <span className="note"> exact-name group of {anchor.ids.length} registration-scoped IDs (no records merged)</span>
+              <span className="note"> {anchor.ids.length} registration-scoped IDs shown as one node (records never merged)</span>
             )}
             {isLoading && (
               <span className="loading"> loading window… {loadedQuarters}/{presenceQuarters.length} quarters

@@ -12,22 +12,25 @@ const edge = (
   attribution_level: "activity", is_superseded: false,
 });
 
-/** Company anchor (2 group IDs) — 3 firms with different amounts, lobbyists, one
- * entity named by every firm's filings (omni) and one named by a single firm. */
+/** Company anchor in DISPLAY SPACE (a 2-ID name-group pre-collapsed to client:1 —
+ * collapse.ts) — 3 firms with different amounts, lobbyists, one entity named by
+ * every firm's filings (omni) and one named by a single firm. */
 function makeUnion(): { union: OrbitUnion; anchors: Set<string> } {
   const nodes = new Map<string, { size: number; label: string; node_type: string; node_id: number }>();
   const add = (t: string, id: number, label = `${t}-${id}`) =>
     nodes.set(`${t}:${id}`, { size: 3, label, node_type: t, node_id: id });
-  add("client", 1, "ACME CORP"); add("client", 2, "ACME CORP");
+  add("client", 1, "ACME CORP · 2 registrations");
   add("registrant", 10, "BIG FIRM"); add("registrant", 11, "MID FIRM"); add("registrant", 12, "SMALL FIRM");
   add("lobbyist", 100); add("lobbyist", 101); add("lobbyist", 102);
   add("gov_entity", 500, "SENATE"); add("gov_entity", 501, "EPA");
   add("client", 3, "SIBLING CO");   // 2-hop: another client of BIG FIRM
 
+  // f3's edges originally touched member client:2 — re-pointed by toDisplaySpace.
+  const orig2 = { node_type: "client" as NodeType, node_id: 2 };
   const edges: EgoEdge[] = [
     edge("represents", "registrant", 10, "client", 1, "f1", 900000),
     edge("represents", "registrant", 11, "client", 1, "f2", 500000),
-    edge("represents", "registrant", 12, "client", 2, "f3", 100000),
+    { ...edge("represents", "registrant", 12, "client", 1, "f3", 100000), orig_target: orig2 },
     edge("represents", "registrant", 10, "client", 3, "f4", 50000),
     edge("worked_on", "lobbyist", 100, "registrant", 10, "f1"),
     edge("worked_on", "lobbyist", 100, "client", 1, "f1"),
@@ -36,13 +39,13 @@ function makeUnion(): { union: OrbitUnion; anchors: Set<string> } {
     // SENATE named by all three firms' filings; EPA only by SMALL FIRM's.
     edge("targeted", "client", 1, "gov_entity", 500, "f1"),
     edge("targeted", "client", 1, "gov_entity", 500, "f2"),
-    edge("targeted", "client", 2, "gov_entity", 500, "f3"),
-    edge("targeted", "client", 2, "gov_entity", 501, "f3"),
+    { ...edge("targeted", "client", 1, "gov_entity", 500, "f3"), orig_source: orig2 },
+    { ...edge("targeted", "client", 1, "gov_entity", 501, "f3"), orig_source: orig2 },
   ];
   const ego: EgoResponse = { nodes: [], edges, truncated: false, dropped: [], year: 2023, period: "first_quarter" };
   return {
     union: { nodes, quarters: [20231], byQuarter: new Map([[20231, ego]]) },
-    anchors: new Set(["client:1", "client:2"]),
+    anchors: new Set(["client:1"]),
   };
 }
 
@@ -56,9 +59,8 @@ describe("orbitLayout — company anchor", () => {
     expect(Object.keys(pos).sort()).toEqual([...union.nodes.keys()].sort());
   });
 
-  it("anchor members sit at the center, firms on ring 1, entities outside", () => {
-    expect(radius(pos["client:1"])).toBeLessThan(0.1);
-    expect(radius(pos["client:2"])).toBeLessThan(0.1);
+  it("the collapsed anchor sits exactly on the hub, firms on ring 1, entities outside", () => {
+    expect(radius(pos["client:1"])).toBeLessThan(0.01);   // origin ± epsilon jitter only
     for (const firm of ["registrant:10", "registrant:11", "registrant:12"]) {
       expect(radius(pos[firm])).toBeGreaterThan(0.4);
       expect(radius(pos[firm])).toBeLessThan(0.5);
@@ -120,6 +122,24 @@ describe("orbitLayout — capacity and other anchors", () => {
     expect(Math.min(...radii)).toBeGreaterThan(0.3);
     expect(Math.max(...radii)).toBeLessThan(0.75);
     expect(new Set(radii.map((r) => r.toFixed(3))).size).toBeGreaterThan(50); // annulus, not one ring
+  });
+
+  it("multi-key anchor sets still pack into the center disc (legacy path)", () => {
+    const nodes = new Map<string, { size: number; label: string; node_type: string; node_id: number }>();
+    nodes.set("client:1", { size: 3, label: "A", node_type: "client", node_id: 1 });
+    nodes.set("client:2", { size: 3, label: "A", node_type: "client", node_id: 2 });
+    nodes.set("registrant:10", { size: 2, label: "R", node_type: "registrant", node_id: 10 });
+    const edges: EgoEdge[] = [
+      edge("represents", "registrant", 10, "client", 1, "u1", 1000),
+      edge("represents", "registrant", 10, "client", 2, "u2", 2000),
+    ];
+    const ego: EgoResponse = { nodes: [], edges, truncated: false, dropped: [], year: 2023, period: "first_quarter" };
+    const pos = orbitLayout(
+      { nodes, quarters: [1], byQuarter: new Map([[1, ego]]) }, "client",
+      new Set(["client:1", "client:2"]));
+    expect(radius(pos["client:1"])).toBeLessThan(0.1);
+    expect(radius(pos["client:2"])).toBeLessThan(0.1);
+    expect(pos["client:1"]).not.toEqual(pos["client:2"]);
   });
 
   it("gov anchor at hops=1 (clients only) becomes an annulus sunflower", () => {

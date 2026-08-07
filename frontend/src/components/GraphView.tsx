@@ -26,9 +26,8 @@ import { useStore } from "../state/store";
 interface Props {
   union: {
     nodes: Map<string, { size: number; label: string; node_type: string; node_id: number }>;
-    edges: Map<string, { s: string; t: string; w: number }>;
     quarters: number[];
-    byQuarter: Map<number, EgoResponse>;
+    byQuarter: Map<number, EgoResponse>; // display-space (anchor group = one node)
   } | null;
   positions: Positions | null;
 }
@@ -245,12 +244,10 @@ export function GraphView({ union, positions }: Props) {
     anchorsRef.current = anchors;
     const qDegree = new Map(now.nodes.map((n) => [nodeKey(n.node_type, n.node_id), n.metrics?.degree ?? 0]));
 
-    // Curated ambient labels: top hubs this quarter + one member per group anchor.
+    // Curated ambient labels: top hubs this quarter + the anchor itself (display
+    // space collapses a group anchor to a single node).
     const hubLabels = topKByDegree(nowNodes, (k) => qDegree.get(k) ?? 0, AMBIENT_HUB_LABELS);
-    if (anchors.size > 0) {
-      const [topAnchor] = topKByDegree(anchors, (k) => qDegree.get(k) ?? 0, 1);
-      if (topAnchor) hubLabels.add(topAnchor);
-    }
+    for (const a of anchors) hubLabels.add(a);
 
     graph.forEachNode((key, attrs) => {
       const status = temporalStatus(nowNodes.has(key), prevNodes.has(key), prev !== undefined);
@@ -273,7 +270,8 @@ export function GraphView({ union, positions }: Props) {
     // topmost — the debug panel lists every underlying filing regardless).
     graph.clearEdges();
     type Agg = { rep: EgoEdge; count: number; amountSum: number; anyNew: boolean;
-                 dropped: boolean; uuids: string[] };
+                 dropped: boolean; uuids: string[];
+                 sourceIds: Set<number>; targetIds: Set<number> };
     const aggregates = new Map<string, Agg>();
 
     const prevEdgeKeys = new Set((prev?.edges ?? []).map(
@@ -287,15 +285,22 @@ export function GraphView({ union, positions }: Props) {
         const k = `${pair}|${e.edge_type}|${dropped}|${e.attribution_level === "filing"}`;
         const isNew = !dropped && prev !== undefined &&
           !prevEdgeKeys.has(`${e.edge_type}|${e.source.node_type}:${e.source.node_id}|${e.target.node_type}:${e.target.node_id}`);
+        // Underlying (pre-collapse) endpoints: a group anchor's display edge can
+        // aggregate several registration-scoped IDs — the debug view needs them all.
+        const origS = (e.orig_source ?? e.source).node_id;
+        const origT = (e.orig_target ?? e.target).node_id;
         const agg = aggregates.get(k);
         if (agg) {
           agg.count += 1;
           agg.uuids.push(e.filing_uuid);
+          agg.sourceIds.add(origS);
+          agg.targetIds.add(origT);
           if (e.amount !== null && e.amount_type === agg.rep.amount_type) agg.amountSum += e.amount;
           agg.anyNew ||= isNew;
         } else {
           aggregates.set(k, { rep: e, count: 1, amountSum: e.amount ?? 0, anyNew: isNew,
-                              dropped, uuids: [e.filing_uuid] });
+                              dropped, uuids: [e.filing_uuid],
+                              sourceIds: new Set([origS]), targetIds: new Set([origT]) });
         }
       }
     };
@@ -329,7 +334,9 @@ export function GraphView({ union, positions }: Props) {
         isGhost: agg.dropped,
         uuids: agg.uuids,
         zIndex: agg.anyNew ? 2 : 1,
-        payload: { ...e, agg_count: agg.count },
+        payload: { ...e, agg_count: agg.count, agg_amount: agg.amountSum,
+                   source_ids: [...agg.sourceIds].sort((a, b) => a - b),
+                   target_ids: [...agg.targetIds].sort((a, b) => a - b) },
       });
       if (!agg.dropped) {
         visibleEdges++;

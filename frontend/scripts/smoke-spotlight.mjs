@@ -35,7 +35,8 @@ const geometry = await page.evaluate(() => {
     graph.forEachNode((k, a) => { if (!a.hidden && pred(k, a)) out.push({ k, x: a.x, y: a.y, label: a.label }); });
     return out;
   };
-  const anchors = of((_k, a) => a.nodeType === "client" && a.label === "COMCAST CORPORATION");
+  // The name-group collapses to ONE display node labeled "… · N registrations".
+  const anchors = of((_k, a) => a.nodeType === "client" && a.label.startsWith("COMCAST CORPORATION"));
   const senate = of((_k, a) => a.label === "SENATE")[0];
   const house = of((_k, a) => a.label === "HOUSE OF REPRESENTATIVES")[0];
   const anchorR = Math.max(...anchors.map((n) => Math.hypot(n.x, n.y)));

@@ -1,6 +1,6 @@
 // Anchor-centric "orbit" layout: the searched entity is the hub of its own picture.
 //
-//   center  — the anchor (a name-group packs into a small disc)
+//   center  — the anchor (a name-group collapses to ONE display node — collapse.ts)
 //   ring 1  — its direct counterparties as amount-ordered wedges (firms for a company,
 //             clients for a firm, ...) with lobbyists as sunflower satellites
 //   outside — government entities, placed at the circular mean of the firms whose
@@ -199,12 +199,16 @@ export function orbitLayout(
   const positions: Positions = {};
   const angleOf = new Map<string, number>();
 
-  // ── Phase 1: center disc ───────────────────────────────────────────────────────
+  // ── Phase 1: center ────────────────────────────────────────────────────────────
+  // Display space collapses a name-group anchor to one node, which sits exactly on
+  // the hub (sunflower(1) would offset it by ~0.057). The disc path remains for any
+  // multi-key anchor set.
   const centerSorted = [...anchorMembers].sort((a, b) => {
     const amt = (k: string) => paired(k).reduce((s, p) => s + p.amount, 0);
     return amt(b) - amt(a) || a.localeCompare(b);
   });
-  Object.assign(positions, sunflower(centerSorted, 0, 0, R_CENTER));
+  if (centerSorted.length === 1) positions[centerSorted[0]] = { x: 0, y: 0 };
+  else Object.assign(positions, sunflower(centerSorted, 0, 0, R_CENTER));
 
   // ── Phase 2: owners — wedges, or an annulus sunflower past the capacity cap ───
   if (govAnnulusMode) {
