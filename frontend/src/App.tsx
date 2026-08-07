@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { LegendBar, TruncationBanner } from "./components/Banners";
 import { DebugPanel } from "./components/DebugPanel";
 import { Footer } from "./components/Footer";
+import { NodePanel } from "./components/NodePanel";
 import { GraphView } from "./components/GraphView";
 import { QuarterSlider } from "./components/QuarterSlider";
 import { SearchBox } from "./components/SearchBox";
@@ -84,6 +85,7 @@ export default function App() {
           <TruncationBanner ego={currentEgo} />
           <div className="main-row">
             <GraphView union={union} positions={positions} />
+            <NodePanel />
             <DebugPanel />
           </div>
           <LegendBar />

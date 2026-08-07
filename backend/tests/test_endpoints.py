@@ -150,6 +150,41 @@ async def test_edge_filings_accepts_id_lists(client):
     assert bad.status_code == 422
 
 
+async def test_node_activities(client):
+    """The node panel's data: issues lobbied per quarter, honoring the view toggle."""
+    # Registrant FIRM A in 2023 Q1: DEF via the amendment f1a (f1 superseded) + TAX via f4.
+    r = (await client.get("/api/node-activities", params={
+        "node_type": "registrant", "ids": "1", "year": 2023,
+        "period": "first_quarter"})).json()
+    assert {g["code"] for g in r["issues"]} == {"DEF", "TAX"}
+    assert {g["display"] for g in r["issues"]} == {"Defense", "Taxation"}
+    uuids = {a["filing_uuid"] for g in r["issues"] for a in g["activities"]}
+    assert "10000000-0000-0000-0000-000000000002" in uuids   # amendment (current)
+    assert "10000000-0000-0000-0000-000000000001" not in uuids  # superseded original
+    assert r["n_filings"] == 2
+
+    # As-filed view swaps the amendment for the original.
+    r0 = (await client.get("/api/node-activities", params={
+        "node_type": "registrant", "ids": "1", "year": 2023,
+        "period": "first_quarter", "view": "original"})).json()
+    uuids0 = {a["filing_uuid"] for g in r0["issues"] for a in g["activities"]}
+    assert "10000000-0000-0000-0000-000000000001" in uuids0
+    assert "10000000-0000-0000-0000-000000000002" not in uuids0
+
+    # Lobbyist BOB JONES appears only on SELFCO's TAX activity.
+    rl = (await client.get("/api/node-activities", params={
+        "node_type": "lobbyist", "ids": "101", "year": 2023,
+        "period": "first_quarter"})).json()
+    assert [g["code"] for g in rl["issues"]] == ["TAX"]
+    assert rl["issues"][0]["activities"][0]["client"] == "SELFCO INDUSTRIES"
+
+    # CSV ids widen the scope (the collapsed CLIENT X CORP name-group: ids 10 and 12).
+    rc = (await client.get("/api/node-activities", params={
+        "node_type": "client", "ids": "10,12", "year": 2023,
+        "period": "first_quarter"})).json()
+    assert rc["n_filings"] == 2 and {g["code"] for g in rc["issues"]} == {"DEF", "TAX"}
+
+
 async def test_meta_serves_disclaimer_and_quarters(client):
     r = (await client.get("/api/meta")).json()
     assert "cannot vouch" in r["disclaimer"]

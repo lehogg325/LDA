@@ -81,6 +81,27 @@ export interface Meta {
   disclaimer: string;
 }
 
+export interface IssueActivity {
+  filing_uuid: string;
+  description: string | null;
+  registrant: string;
+  client: string;
+  filing_document_url: string;
+}
+
+export interface IssueGroup {
+  code: string;
+  display: string;
+  n_activities: number;
+  activities: IssueActivity[]; // capped server-side; n_activities is the true count
+}
+
+export interface NodeActivities {
+  issues: IssueGroup[];
+  n_filings: number;
+  truncated: boolean;
+}
+
 export interface FilingBehindEdge {
   filing_uuid: string;
   filing_type_display: string;
@@ -125,6 +146,11 @@ export const api = {
   timeline: (t: NodeType, ids: number[]) =>
     get<{ quarters: TimelineQuarter[] }>(`/api/timeline/${t}/${ids[0]}?ids=${ids.join(",")}`),
   meta: () => get<Meta>("/api/meta"),
+  nodeActivities: (t: NodeType, ids: number[], year: number, period: string, view: ViewMode) =>
+    get<NodeActivities>(
+      `/api/node-activities?node_type=${t}&ids=${ids.join(",")}&year=${year}` +
+        `&period=${period}&view=${view}`,
+    ),
   edgeFilings: (e: EgoEdge, year: number, period: string) => {
     // A display edge may aggregate several registration-scoped IDs (a name-group
     // anchor collapses to one node); the backend accepts CSV id lists for that.

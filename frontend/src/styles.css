@@ -217,7 +217,8 @@ select {
 
 .legend .hint { margin-left: auto; color: var(--gray); opacity: 0.8; text-transform: none; letter-spacing: 0.04em; }
 
-/* The debug panel is a paper artifact on the console: Newsprint card, Teletype ink. */
+/* The side panels are paper artifacts on the console: Newsprint card, Teletype ink.
+   They slide in from the right edge when a node or edge is selected. */
 .debug-panel {
   width: 330px;
   background: var(--newsprint);
@@ -227,7 +228,38 @@ select {
   font-family: var(--serif-body);
   font-size: 13.5px;
   overflow-y: auto;
+  animation: panel-slide 0.22s ease-out;
 }
+@keyframes panel-slide {
+  from { transform: translateX(36px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* Node activity panel */
+.node-panel .node-title {
+  font-family: var(--serif-display);
+  font-weight: 800;
+  font-size: 16px;
+  line-height: 1.25;
+  margin: 10px 0 2px;
+}
+.issue-group summary {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 9px;
+  color: var(--ink);
+}
+.issue-group summary em {
+  text-transform: none;
+  letter-spacing: 0;
+  font-style: normal;
+  color: #6d6152;
+}
+.node-panel .desc { display: block; line-height: 1.45; }
+.node-panel .act-meta { font-family: var(--mono); font-size: 10.5px; margin-top: 1px; }
 .debug-panel header {
   display: flex;
   justify-content: space-between;

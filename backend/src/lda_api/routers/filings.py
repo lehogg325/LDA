@@ -78,13 +78,86 @@ async def filing_detail(filing_uuid: str):
     }
 
 
-def _csv_ids(csv: str | None, fallback: int) -> list[int]:
+def _csv_ids(csv: str | None, fallback: int | None) -> list[int]:
     if not csv:
+        if fallback is None:
+            raise HTTPException(422, "ids is required")
         return [fallback]
     try:
         return [int(x) for x in csv.split(",") if x.strip()]
     except ValueError:
         raise HTTPException(422, "ids must be a comma-separated list of integers")
+
+
+# What a node lobbied on: its filings' activities for one quarter. The node-type
+# fragment supplies the JOIN/WHERE; the shared tail applies quarter + view. Pre-2021
+# legacy filings keep their (filing-level) entity lists in the same activity tables,
+# so gov_entity works across the whole record.
+_ACTIVITY_SCOPE = {
+    "registrant": "WHERE f.registrant_id = ANY(%(ids)s)",
+    "client": "WHERE f.client_id = ANY(%(ids)s)",
+    "lobbyist": ("JOIN activity_lobbyists al ON al.filing_uuid = a.filing_uuid "
+                 "AND al.activity_index = a.activity_index "
+                 "WHERE al.lobbyist_id = ANY(%(ids)s)"),
+    "gov_entity": ("JOIN activity_government_entities age ON age.filing_uuid = a.filing_uuid "
+                   "AND age.activity_index = a.activity_index "
+                   "WHERE age.gov_entity_id = ANY(%(ids)s)"),
+}
+
+_ACTIVITY_ROW_CAP = 2000
+_PER_ISSUE_CAP = 30
+
+
+def _node_activities_sql(node_type: str) -> str:
+    return f"""
+SELECT DISTINCT a.filing_uuid::text, a.activity_index, a.general_issue_code, i.display,
+       a.description, r.display_name, c.display_name, f.filing_document_url
+FROM filings f
+JOIN filing_activities a ON a.filing_uuid = f.filing_uuid
+LEFT JOIN ref_issue_codes i ON i.code = a.general_issue_code
+JOIN registrants r ON r.id = f.registrant_id
+JOIN clients c ON c.id = f.client_id
+{_ACTIVITY_SCOPE[node_type]}
+  AND f.filing_year = %(year)s AND f.filing_period = %(period)s
+  AND CASE WHEN %(view)s = 'original' THEN f.is_original ELSE f.is_current END
+ORDER BY a.general_issue_code, a.filing_uuid::text, a.activity_index
+LIMIT {_ACTIVITY_ROW_CAP}
+"""
+
+
+@router.get("/node-activities")
+async def node_activities(
+        node_type: str = Query(pattern="^(registrant|client|lobbyist|gov_entity)$"),
+        ids: str = Query(), year: int = Query(), period: str = Query(),
+        view: str = Query(default="amended", pattern="^(amended|original)$")):
+    """What this node lobbied on in one quarter, grouped by general issue code.
+
+    Backs the node side panel. `ids` is a CSV list because a name-group anchor spans
+    several registration-scoped IDs; `view` mirrors the ego endpoint's amended/original
+    history semantics.
+    """
+    id_list = _csv_ids(ids, None)
+    async with (await get_pool()).connection() as conn:
+        rows = await (await conn.execute(_node_activities_sql(node_type), {
+            "ids": id_list, "year": year, "period": period, "view": view})).fetchall()
+
+    issues: dict[str, dict] = {}
+    filings_seen: set[str] = set()
+    for uuid, _idx, code, display, desc, reg, cli, url in rows:
+        filings_seen.add(uuid)
+        g = issues.setdefault(code or "", {
+            "code": code or "", "display": display or code or "Unspecified",
+            "n_activities": 0, "activities": []})
+        g["n_activities"] += 1
+        if len(g["activities"]) < _PER_ISSUE_CAP:
+            g["activities"].append({
+                "filing_uuid": uuid, "description": desc or None,
+                "registrant": reg, "client": cli, "filing_document_url": url})
+    return {
+        "issues": sorted(issues.values(), key=lambda g: (-g["n_activities"], g["code"])),
+        "n_filings": len(filings_seen),
+        "truncated": len(rows) == _ACTIVITY_ROW_CAP,
+    }
 
 
 @router.get("/edge-filings")

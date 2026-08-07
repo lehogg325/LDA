@@ -64,6 +64,7 @@ export function GraphView({ union, positions }: Props) {
   const setSpotlightRef = useRef<(node: string | null, pinned: boolean) => void>(() => {});
   const quarterOrd = useStore((s) => s.quarterOrd);
   const setSelectedEdge = useStore((s) => s.setSelectedEdge);
+  const setSelectedNode = useStore((s) => s.setSelectedNode);
 
   // Mount once.
   useEffect(() => {
@@ -184,8 +185,15 @@ export function GraphView({ union, positions }: Props) {
     sigma.on("clickNode", ({ node }) => {
       if (spotlightRef.current.pinned && spotlightRef.current.node === node) {
         setSpotlight(null, false);
+        setSelectedNode(null);
       } else {
         setSpotlight(node, true);
+        // Open the activity panel for the clicked node (keys are "type:id").
+        setSelectedNode({
+          node_type: graph.getNodeAttribute(node, "nodeType"),
+          node_id: Number(node.split(":")[1]),
+          label: graph.getNodeAttribute(node, "label"),
+        });
       }
     });
     sigma.on("clickEdge", ({ edge }) => {
@@ -195,6 +203,7 @@ export function GraphView({ union, positions }: Props) {
     sigma.on("clickStage", () => {
       setSpotlight(null, false);
       setSelectedEdge(null);
+      setSelectedNode(null);
     });
 
     sigmaRef.current = sigma;
@@ -203,7 +212,7 @@ export function GraphView({ union, positions }: Props) {
       sigma.kill();
       sigmaRef.current = null;
     };
-  }, [setSelectedEdge]);
+  }, [setSelectedEdge, setSelectedNode]);
 
   // Rebuild graph content when the union (anchor/window/view) changes — positions fixed.
   useEffect(() => {
