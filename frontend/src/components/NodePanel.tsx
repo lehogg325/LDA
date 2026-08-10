@@ -15,7 +15,12 @@ const TYPE_LABEL: Record<string, string> = {
 const PERIODS_BY_DIGIT = ["", "first_quarter", "second_quarter", "third_quarter",
                           "fourth_quarter", "mid_year", "year_end"];
 
-export function NodePanel({ expansionInfo }: { expansionInfo?: ExpansionInfo[] }) {
+interface NodePanelProps {
+  expansionInfo?: ExpansionInfo[];
+  highlighted?: boolean; // guided-tour spotlight
+}
+
+export function NodePanel({ expansionInfo, highlighted }: NodePanelProps) {
   const node = useStore((s) => s.selectedNode);
   const anchor = useStore((s) => s.anchor);
   const quarterOrd = useStore((s) => s.quarterOrd);
@@ -73,7 +78,7 @@ export function NodePanel({ expansionInfo }: { expansionInfo?: ExpansionInfo[] }
   };
 
   return (
-    <aside className="debug-panel node-panel">
+    <aside className={`debug-panel node-panel${highlighted ? " tour-highlight" : ""}`}>
       <header>
         <span><strong>{TYPE_LABEL[node.node_type]}</strong> · lobbying activity</span>
         <button onClick={() => setSelectedNode(null)}>×</button>

@@ -5,7 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { periodLabel } from "../api/client";
 import { useStore } from "../state/store";
 
-export function QuarterSlider({ quarters }: { quarters: number[] }) {
+interface QuarterSliderProps {
+  quarters: number[];
+  highlighted?: boolean; // guided-tour spotlight
+}
+
+export function QuarterSlider({ quarters, highlighted }: QuarterSliderProps) {
   const quarterOrd = useStore((s) => s.quarterOrd);
   const setQuarterOrd = useStore((s) => s.setQuarterOrd);
   const [playing, setPlaying] = useState(false);
@@ -35,7 +40,7 @@ export function QuarterSlider({ quarters }: { quarters: number[] }) {
     `${Math.floor(ord / 10)} ${periodLabel(["", "first_quarter", "second_quarter", "third_quarter", "fourth_quarter", "mid_year", "year_end"][ord % 10])}`;
 
   return (
-    <div className="quarter-slider">
+    <div className={`quarter-slider${highlighted ? " tour-highlight" : ""}`}>
       <button onClick={() => (playing ? setPlaying(false) : play())} title="Play from the beginning">
         {playing ? "⏸" : "▶"}
       </button>

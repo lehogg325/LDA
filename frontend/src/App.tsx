@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { LegendBar, TruncationBanner } from "./components/Banners";
 import { DebugPanel } from "./components/DebugPanel";
 import { Footer } from "./components/Footer";
+import GuidedTour from "./components/GuidedTour";
 import { NodePanel } from "./components/NodePanel";
 import { GraphView } from "./components/GraphView";
 import { QuarterSlider } from "./components/QuarterSlider";
@@ -21,6 +22,8 @@ export default function App() {
   const setAnchor = useStore((s) => s.setAnchor);
   const expansions = useStore((s) => s.expansions);
   const clearExpansions = useStore((s) => s.clearExpansions);
+  const [tourActive, setTourActive] = useState(false);
+  const [tourHighlight, setTourHighlight] = useState<"issues" | "slider" | null>(null);
 
   const { timeline, presenceQuarters, loadedQuarters, failedQuarters, union, positions,
           expansionInfo, isLoading } = useEgoWindow(anchor, hops, view, expansions);
@@ -64,6 +67,12 @@ export default function App() {
               <option value="original">as filed</option>
             </select>
           </label>
+          <button
+            className={`tour-trigger${tourActive ? " active" : ""}`}
+            onClick={() => setTourActive(true)}
+          >
+            Guided tour
+          </button>
         </div>
       </header>
 
@@ -73,6 +82,9 @@ export default function App() {
             represent have filed their disclosures. Search for any registrant, client,
             lobbyist, or government entity — and watch its network change, quarter by
             quarter, across eighteen years.</p>
+          <button className="empty-state-tour-btn" onClick={() => setTourActive(true)}>
+            New here? Take the tour
+          </button>
         </div>
       ) : (
         <>
@@ -97,15 +109,24 @@ export default function App() {
           <TruncationBanner ego={currentEgo} />
           <div className="main-row">
             <GraphView union={union} positions={positions} />
-            <NodePanel expansionInfo={expansionInfo} />
+            <NodePanel expansionInfo={expansionInfo} highlighted={tourHighlight === "issues"} />
             <DebugPanel />
           </div>
           <LegendBar />
-          {union && positions && <QuarterSlider quarters={union.quarters} />}
+          {union && positions && (
+            <QuarterSlider quarters={union.quarters} highlighted={tourHighlight === "slider"} />
+          )}
           <TimelineStrip quarters={timeline} />
         </>
       )}
       <Footer />
+      {tourActive && (
+        <GuidedTour
+          ready={union !== null && positions !== null}
+          onHighlight={setTourHighlight}
+          onDone={() => { setTourActive(false); setTourHighlight(null); }}
+        />
+      )}
     </div>
   );
 }

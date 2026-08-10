@@ -63,6 +63,7 @@ export function GraphView({ union, positions }: Props) {
   const visibleEdgeCountRef = useRef(0);
   const setSpotlightRef = useRef<(node: string | null, pinned: boolean) => void>(() => {});
   const quarterOrd = useStore((s) => s.quarterOrd);
+  const selectedNode = useStore((s) => s.selectedNode);
   const setSelectedEdge = useStore((s) => s.setSelectedEdge);
   const setSelectedNode = useStore((s) => s.setSelectedNode);
 
@@ -366,6 +367,18 @@ export function GraphView({ union, positions }: Props) {
     }
     sigmaRef.current?.refresh();
   }, [union, positions, quarterOrd]);
+
+  // Pin the spotlight to whatever the store's selectedNode is, even when it was set
+  // programmatically (the guided tour) rather than by clicking the node directly —
+  // keeps the graph's visual highlight in sync with the side panel either way.
+  useEffect(() => {
+    if (!selectedNode) return;
+    const key = nodeKey(selectedNode.node_type, selectedNode.node_id);
+    const graph = graphRef.current;
+    if (graph.hasNode(key) && !graph.getNodeAttribute(key, "hidden")) {
+      setSpotlightRef.current(key, true);
+    }
+  }, [selectedNode]);
 
   const camera = (fn: "animatedZoom" | "animatedUnzoom" | "animatedReset") => () =>
     sigmaRef.current?.getCamera()[fn]({ duration: fn === "animatedReset" ? 400 : 250 });
