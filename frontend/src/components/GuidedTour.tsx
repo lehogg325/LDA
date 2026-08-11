@@ -40,6 +40,10 @@ interface Step {
   subtitle: string;
   body: string;
   highlight?: HighlightTarget;
+  // The panel normally docks bottom-center, but that's exactly where the quarter
+  // slider lives — for the one step that asks the user to actually use it, the
+  // panel moves up top instead of sitting on top of the control it's explaining.
+  dock?: "top";
 }
 
 const STEPS: Step[] = [
@@ -88,6 +92,7 @@ const STEPS: Step[] = [
       "only which nodes and edges are visible, and whether they're new, dropped, or " +
       "persisting since last quarter, changes.",
     highlight: "slider",
+    dock: "top",
   },
 ];
 
@@ -144,6 +149,9 @@ export default function GuidedTour({ onDone, ready, onHighlight }: GuidedTourPro
   const setQuarterOrd = useStore((s) => s.setQuarterOrd);
   const setHops = useStore((s) => s.setHops);
   const setView = useStore((s) => s.setView);
+  // The node panel docks a 330px sidebar on the right — center within what's left
+  // of the viewport instead of the full width, or the panel drifts into it.
+  const hasSidePanel = useStore((s) => s.selectedNode !== null);
 
   function applyStep(i: number) {
     switch (STEPS[i].kind) {
@@ -204,9 +212,14 @@ export default function GuidedTour({ onDone, ready, onHighlight }: GuidedTourPro
   const s = STEPS[step];
   const waiting = s.kind === "search" && !ready;
   const isLast = step === STEPS.length - 1;
+  const className = [
+    "guided-tour",
+    s.dock === "top" ? "dock-top" : "",
+    hasSidePanel && s.dock !== "top" ? "with-side-panel" : "",
+  ].filter(Boolean).join(" ");
 
   return (
-    <div className="guided-tour">
+    <div className={className}>
       <Dots total={STEPS.length} current={step} />
       <div className="guided-tour-subtitle">{s.subtitle}</div>
       <div className="guided-tour-title">{s.title}</div>

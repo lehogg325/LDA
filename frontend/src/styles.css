@@ -445,6 +445,18 @@ select {
   backdrop-filter: blur(10px);
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 24px rgba(255, 79, 0, 0.08);
 }
+/* The node panel docks a 330px sidebar on the right — recenter within the space
+   that's actually free instead of the full viewport width. */
+.guided-tour.with-side-panel {
+  left: calc((100vw - 330px) / 2);
+  width: min(560px, calc(100vw - 330px - 32px));
+}
+/* The "Move Through Time" step points at the quarter slider, which lives at the
+   bottom of the page — dock up top instead of sitting on top of it. */
+.guided-tour.dock-top {
+  top: 116px;
+  bottom: auto;
+}
 .guided-tour-dots { display: flex; gap: 6px; margin-bottom: 12px; }
 .guided-tour-dots span {
   display: inline-block;

@@ -209,7 +209,20 @@ export function GraphView({ union, positions }: Props) {
 
     sigmaRef.current = sigma;
     (window as unknown as Record<string, unknown>).__lda = { graph, sigma };
+
+    // Sigma sizes its canvas from the container's dimensions AT CONSTRUCTION TIME.
+    // The quarter slider and timeline strip mount later (once data loads) and shrink
+    // this container via flex — without this, the canvas keeps its taller, stale
+    // size forever, and the graph's fitted center (the anchor, most of the time)
+    // renders below the real container, hidden under the rows beneath it.
+    const resizeObserver = new ResizeObserver(() => {
+      sigmaRef.current?.resize();
+      sigmaRef.current?.refresh();
+    });
+    resizeObserver.observe(containerRef.current);
+
     return () => {
+      resizeObserver.disconnect();
       sigma.kill();
       sigmaRef.current = null;
     };
