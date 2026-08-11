@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg_pool import PoolTimeout
 
 from . import db
-from .routers import diff, ego, filings, meta, quarter, search, timeline
+from .routers import diff, ego, filings, meta, quarter, search, search_events, timeline
 from .settings import Settings
 
 
@@ -39,7 +39,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "error": type(exc).__name__,
         })
     for router in (search.router, ego.router, timeline.router,
-                   diff.router, quarter.router, meta.router, filings.router):
+                   diff.router, quarter.router, meta.router, filings.router,
+                   search_events.router):
         app.include_router(router, prefix="/api")
 
     dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"

@@ -60,6 +60,7 @@ export function SearchBox() {
               key={`${h.node_type}:${h.label}:${h.ids[0]}`}
               onClick={() => {
                 setAnchor({ node_type: h.node_type, ids: h.ids, label: h.label });
+                api.logSearch(h.node_type, h.label).catch(() => {}); // best-effort beacon
                 setOpen(false);
                 suppressSearch.current = true;   // programmatic setQ must not re-search
                 setQ(h.label);

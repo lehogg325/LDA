@@ -185,6 +185,24 @@ async def test_node_activities(client):
     assert rc["n_filings"] == 2 and {g["code"] for g in rc["issues"]} == {"DEF", "TAX"}
 
 
+async def test_search_events_logged_and_ranked(client):
+    """POSTing a selection logs it; GET .../top ranks by count within the window,
+    restricted to client/registrant (never lobbyist/gov_entity)."""
+    await client.post("/api/search-events", params={"node_type": "registrant", "label": "FIRM A"})
+    await client.post("/api/search-events", params={"node_type": "registrant", "label": "FIRM A"})
+    await client.post("/api/search-events", params={"node_type": "client", "label": "CLIENT X CORP"})
+    await client.post("/api/search-events", params={"node_type": "lobbyist", "label": "ALICE SMITH"})
+
+    r = (await client.get("/api/search-events/top")).json()
+    top_two = r["results"][:2]
+    assert top_two[0] == {"node_type": "registrant", "label": "FIRM A", "count": 2}
+    assert top_two[1] == {"node_type": "client", "label": "CLIENT X CORP", "count": 1}
+    assert all(row["node_type"] != "lobbyist" for row in r["results"])
+
+    bad = await client.post("/api/search-events", params={"node_type": "nope", "label": "X"})
+    assert bad.status_code == 422
+
+
 async def test_meta_serves_disclaimer_and_quarters(client):
     r = (await client.get("/api/meta")).json()
     assert "cannot vouch" in r["disclaimer"]

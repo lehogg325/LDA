@@ -102,18 +102,11 @@ export interface NodeActivities {
   truncated: boolean;
 }
 
-export interface TopResult {
+export interface SearchTrendingResult {
   node_type: NodeType;
-  node_id: number;
   label: string;
-  degree: number;
-  weighted_degree: number;
-  total_income: number | null;
-  total_expenses: number | null;
-  betweenness: number | null;
+  count: number;
 }
-
-export type TopMetric = "weighted_degree" | "degree" | "total_income" | "total_expenses" | "betweenness";
 
 export interface FilingBehindEdge {
   filing_uuid: string;
@@ -201,10 +194,14 @@ export const api = {
   timeline: (t: NodeType, ids: number[]) =>
     get<{ quarters: TimelineQuarter[] }>(`/api/timeline/${t}/${ids[0]}?ids=${ids.join(",")}`),
   meta: () => get<Meta>("/api/meta"),
-  quarterTop: (year: number, period: string, metric: TopMetric, limit = 10, nodeType?: NodeType) =>
-    get<{ year: number; period: string; metric: TopMetric; results: TopResult[] }>(
-      `/api/quarter/${year}/${period}/top?metric=${metric}&limit=${limit}` +
-        (nodeType ? `&node_type=${nodeType}` : ""),
+  // Fire-and-forget: a SearchBox selection, not a raw keystroke. Callers should not
+  // await this — it's a best-effort analytics beacon that must never block or break
+  // the search UX if it fails.
+  logSearch: (t: NodeType, label: string) =>
+    fetch(`/api/search-events?node_type=${t}&label=${encodeURIComponent(label)}`, { method: "POST" }),
+  searchTrending: (days = 30, limit = 10) =>
+    get<{ days: number; results: SearchTrendingResult[] }>(
+      `/api/search-events/top?days=${days}&limit=${limit}`,
     ),
   nodeActivities: (t: NodeType, ids: number[], year: number, period: string, view: ViewMode) =>
     get<NodeActivities>(
