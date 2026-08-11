@@ -29,6 +29,7 @@ const SCALE = 100;
 
 // Radii (normalized units, scaled at the end)
 const R_CENTER = 0.08;
+const R_CENTER_SAT = 0.25; // a registrant anchor's own lobbyists, hugging the center
 const R_OWNERS = 0.45;
 const R_SAT_MAX_DISC = 0.12;
 const R_EXTRA_CLIENT = 0.68;
@@ -244,16 +245,27 @@ export function orbitLayout(
   owners = [...owners].sort((a, b) =>
     (ownerMetric.get(b)! - ownerMetric.get(a)!) || a.localeCompare(b));
 
-  // Lobbyist satellites: primary owner = the one they share the most filings with.
-  const satellitesOf = new Map<string, string[]>();
+  // Lobbyist satellites: a lobbyist's real organizing dimension is always which
+  // REGISTRANT (firm) they work for — never "owners" as such, which is clients when
+  // the anchor itself is a registrant. Getting this wrong is exactly what scattered
+  // a registrant-anchor's own staff across its clients' wedges instead of clustering
+  // them at the center, beside the firm they actually work for.
+  const satellitesOf = new Map<string, string[]>();   // owner-wedge key -> lobbyist keys
+  const centerSatellites: string[] = [];               // anchor-is-registrant's own staff
   const lobbyists = anchorType === "lobbyist" ? [] : nonAnchor(byType("lobbyist"));
   const unaffiliated: string[] = [];
   for (const lob of lobbyists) {
-    const firms = paired(lob).filter((p) => owners.includes(p.partner));
+    const firms = paired(lob).filter((p) =>
+      nodeKeys.get(p.partner)?.node_type === "registrant"
+      && (owners.includes(p.partner) || (anchorType === "registrant" && anchorKeys.has(p.partner))));
     if (firms.length === 0) { unaffiliated.push(lob); continue; }
     const primary = firms[0].partner;
-    if (!satellitesOf.has(primary)) satellitesOf.set(primary, []);
-    satellitesOf.get(primary)!.push(lob);
+    if (anchorType === "registrant" && anchorKeys.has(primary)) {
+      centerSatellites.push(lob);
+    } else {
+      if (!satellitesOf.has(primary)) satellitesOf.set(primary, []);
+      satellitesOf.get(primary)!.push(lob);
+    }
   }
 
   const positions: Positions = {};
@@ -269,6 +281,17 @@ export function orbitLayout(
   });
   if (centerSorted.length === 1) positions[centerSorted[0]] = { x: 0, y: 0 };
   else Object.assign(positions, sunflower(centerSorted, 0, 0, R_CENTER));
+
+  // ── Phase 1.5: a registrant anchor's own lobbyists — sunflower at the center ───
+  // (nothing to do for other anchor types: centerSatellites is only ever populated
+  // when anchorType === "registrant", see the satellite-assignment loop above.)
+  if (centerSatellites.length > 0) {
+    Object.assign(positions, sunflower(centerSatellites, 0, 0, R_CENTER_SAT));
+    for (const sat of centerSatellites) {
+      const p = positions[sat];
+      angleOf.set(sat, Math.atan2(p.y, p.x));
+    }
+  }
 
   // ── Phase 2: owners — wedges, or an annulus sunflower past the capacity cap ───
   if (govAnnulusMode) {

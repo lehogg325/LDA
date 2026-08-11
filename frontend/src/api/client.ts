@@ -201,9 +201,10 @@ export const api = {
   timeline: (t: NodeType, ids: number[]) =>
     get<{ quarters: TimelineQuarter[] }>(`/api/timeline/${t}/${ids[0]}?ids=${ids.join(",")}`),
   meta: () => get<Meta>("/api/meta"),
-  quarterTop: (year: number, period: string, metric: TopMetric, limit = 10) =>
+  quarterTop: (year: number, period: string, metric: TopMetric, limit = 10, nodeType?: NodeType) =>
     get<{ year: number; period: string; metric: TopMetric; results: TopResult[] }>(
-      `/api/quarter/${year}/${period}/top?metric=${metric}&limit=${limit}`,
+      `/api/quarter/${year}/${period}/top?metric=${metric}&limit=${limit}` +
+        (nodeType ? `&node_type=${nodeType}` : ""),
     ),
   nodeActivities: (t: NodeType, ids: number[], year: number, period: string, view: ViewMode) =>
     get<NodeActivities>(

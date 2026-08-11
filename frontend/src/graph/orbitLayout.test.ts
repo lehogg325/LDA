@@ -162,6 +162,38 @@ describe("orbitLayout — capacity and other anchors", () => {
   });
 });
 
+describe("orbitLayout — registrant anchor", () => {
+  it("the registrant's own lobbyists cluster at the center, not scattered to client wedges", () => {
+    const nodes = new Map<string, { size: number; label: string; node_type: string; node_id: number }>();
+    nodes.set("registrant:10", { size: 3, label: "BIG FIRM", node_type: "registrant", node_id: 10 });
+    nodes.set("client:1", { size: 3, label: "CLIENT A", node_type: "client", node_id: 1 });
+    nodes.set("client:2", { size: 3, label: "CLIENT B", node_type: "client", node_id: 2 });
+    nodes.set("lobbyist:100", { size: 2, label: "L1", node_type: "lobbyist", node_id: 100 });
+    nodes.set("lobbyist:101", { size: 2, label: "L2", node_type: "lobbyist", node_id: 101 });
+    const edges: EgoEdge[] = [
+      edge("represents", "registrant", 10, "client", 1, "f1", 900000),
+      edge("represents", "registrant", 10, "client", 2, "f2", 100000),
+      // Each lobbyist's strongest tie (by the paired() tiebreak) would be a
+      // DIFFERENT client if satellites were still keyed by "owner" (= client, for
+      // a registrant anchor) — that's exactly the bug: they'd scatter to their
+      // client's wedge instead of clustering with the firm they work for.
+      edge("worked_on", "lobbyist", 100, "registrant", 10, "f1"),
+      edge("worked_on", "lobbyist", 100, "client", 1, "f1"),
+      edge("worked_on", "lobbyist", 101, "registrant", 10, "f2"),
+      edge("worked_on", "lobbyist", 101, "client", 2, "f2"),
+    ];
+    const ego: EgoResponse = { nodes: [], edges, truncated: false, dropped: [], year: 2023, period: "first_quarter" };
+    const pos = orbitLayout(
+      { nodes, quarters: [1], byQuarter: new Map([[1, ego]]) },
+      "registrant", new Set(["registrant:10"])).positions;
+
+    for (const lob of ["lobbyist:100", "lobbyist:101"]) {
+      expect(radius(pos[lob])).toBeGreaterThan(0.08);  // not literally on the anchor
+      expect(radius(pos[lob])).toBeLessThan(0.35);     // well inside the client-wedge ring (0.45)
+    }
+  });
+});
+
 describe("orbitAttach — incremental expansion placement", () => {
   const { union, anchors } = makeUnion();
   const base = orbitLayout(union, "client", anchors);
