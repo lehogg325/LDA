@@ -2,7 +2,7 @@
 // Moving it only changes which nodes/edges are drawn — the layout never moves.
 
 import { useEffect, useRef, useState } from "react";
-import { periodLabel } from "../api/client";
+import { ordLabel } from "../api/client";
 import { useStore } from "../state/store";
 
 interface QuarterSliderProps {
@@ -36,8 +36,6 @@ export function QuarterSlider({ quarters, highlighted }: QuarterSliderProps) {
   };
 
   if (quarters.length === 0 || quarterOrd === null) return null;
-  const label = (ord: number) =>
-    `${Math.floor(ord / 10)} ${periodLabel(["", "first_quarter", "second_quarter", "third_quarter", "fourth_quarter", "mid_year", "year_end"][ord % 10])}`;
 
   return (
     <div className={`quarter-slider${highlighted ? " tour-highlight" : ""}`}>
@@ -51,7 +49,7 @@ export function QuarterSlider({ quarters, highlighted }: QuarterSliderProps) {
         value={Math.max(0, idx)}
         onChange={(e) => setQuarterOrd(quarters[Number(e.target.value)])}
       />
-      <span className="quarter-label">{label(quarterOrd)}</span>
+      <span className="quarter-label">{ordLabel(quarterOrd)}</span>
     </div>
   );
 }

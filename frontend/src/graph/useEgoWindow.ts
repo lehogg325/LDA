@@ -35,6 +35,13 @@ export interface UnionGraph {
   byQuarter: Map<number, EgoResponse>; // display-space responses
 }
 
+/** A presence quarter is "settled" once it has either loaded or permanently failed
+ * (react-query's retries exhausted) — requiring zero failures instead would hang the
+ * whole graph forever behind one bad quarter, even when every other quarter is fine. */
+export function allQuartersSettled(loaded: number, failed: number, total: number): boolean {
+  return total > 0 && loaded + failed === total;
+}
+
 export type ExpansionState = "adding" | "in-graph" | "too-large";
 export interface ExpansionInfo {
   node_type: NodeType;
@@ -91,11 +98,11 @@ export function useEgoWindow(
     }),
   });
 
-  // allLoaded is ANCHOR-ONLY: expansion loading must never blank the graph.
-  const allLoaded = presenceQuarters.length > 0 && egos.loaded === presenceQuarters.length;
+  // allSettled is ANCHOR-ONLY: expansion loading must never blank the graph.
+  const allSettled = allQuartersSettled(egos.loaded, egos.failed, presenceQuarters.length);
 
   const baseUnion: UnionGraph | null = useMemo(() => {
-    if (!allLoaded || !anchor) return null;
+    if (!allSettled || !anchor) return null;
     // Display space: the anchor name-group renders as one node. Raw responses in the
     // react-query cache stay untouched; originals survive on each edge (orig_*).
     const collapse = makeCollapse(anchor);
@@ -112,7 +119,7 @@ export function useEgoWindow(
       nodes = collectNodes(byQuarter, quarters);
     }
     return { nodes, quarters, byQuarter };
-  }, [allLoaded, anchor, presenceQuarters, egos.data]);
+  }, [allSettled, anchor, presenceQuarters, egos.data]);
 
   // Anchor-centric orbit layout: pure, synchronous, deterministic — one run per union.
   const anchorKey = anchor ? `${anchor.node_type}:${anchor.ids.join(",")}` : "";
@@ -202,6 +209,6 @@ export function useEgoWindow(
     union: merged.union,
     positions,
     expansionInfo: merged.expansionInfo,
-    isLoading: anchor !== null && (!allLoaded || positions === null),
+    isLoading: anchor !== null && (!allSettled || positions === null),
   };
 }

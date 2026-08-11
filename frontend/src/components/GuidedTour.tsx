@@ -26,10 +26,12 @@ const HOGAN_LOVELLS: SelectedNode = {
 const HOUSE_OF_REPS: SelectedNode = {
   node_type: "gov_entity" as NodeType, node_id: 2, label: "HOUSE OF REPRESENTATIVES",
 };
-// 2026 Q2 — the most recently filed quarter at resolution time. Both example edges
-// (Hogan Lovells "represents", House of Representatives "targeted") are live here,
-// and have been every quarter for years, so this stays a safe, non-empty pick.
-const DEMO_QUARTER_ORD = 20262;
+// Both example edges (Hogan Lovells "represents", House of Representatives
+// "targeted") have held every quarter for years, right up through whatever the
+// most recent filed quarter is — so no quarter needs pinning here. App.tsx already
+// defaults quarterOrd to the anchor's own latest presence quarter (from /timeline)
+// once the ego window loads; deferring to that keeps this tour evergreen instead
+// of quietly going stale as new quarters get ingested.
 
 type HighlightTarget = "issues" | "slider";
 type StepKind = "search" | "firm" | "gov" | "issues" | "slider";
@@ -146,7 +148,6 @@ export default function GuidedTour({ onDone, ready, onHighlight }: GuidedTourPro
   const [showSuggestions, setShowSuggestions] = useState(false);
   const setAnchor = useStore((s) => s.setAnchor);
   const setSelectedNode = useStore((s) => s.setSelectedNode);
-  const setQuarterOrd = useStore((s) => s.setQuarterOrd);
   const setHops = useStore((s) => s.setHops);
   const setView = useStore((s) => s.setView);
   // The node panel docks a 330px sidebar on the right — center within what's left
@@ -159,7 +160,6 @@ export default function GuidedTour({ onDone, ready, onHighlight }: GuidedTourPro
         setHops(1);
         setView("amended");
         setAnchor(WALMART);
-        setQuarterOrd(DEMO_QUARTER_ORD);
         break;
       case "firm":
         setSelectedNode(HOGAN_LOVELLS);

@@ -138,6 +138,8 @@ select {
   font-size: 13.5px;
 }
 .search-results li:hover { background: var(--indigo); }
+.search-no-results { cursor: default; color: var(--gray); font-style: italic; }
+.search-no-results:hover { background: none; }
 .badge {
   font-family: var(--mono);
   font-size: 9px;
@@ -158,9 +160,9 @@ select {
 
 /* ── Empty state ──────────────────────────────────────────────────────── */
 .empty-state {
-  padding: 110px 24px;
+  padding: 64px 24px;
   text-align: center;
-  max-width: 640px;
+  max-width: 720px;
   margin: 0 auto;
   color: var(--lunar);
 }
@@ -192,6 +194,63 @@ select {
 }
 .empty-state-tour-btn:hover { background: rgba(255, 79, 0, 0.22); }
 
+.trending-panel {
+  margin-top: 34px;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 14px 16px;
+}
+.trending-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.trending-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--orange);
+}
+.trending-status {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--gray);
+  padding: 10px 0;
+}
+.trending-list { list-style: none; margin: 0; padding: 0; }
+.trending-list li + li { margin-top: 4px; }
+.trending-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  font-family: var(--serif-body);
+  font-size: 13.5px;
+  color: var(--lunar);
+  background: none;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  text-align: left;
+}
+.trending-list button:hover:not(:disabled) { background: var(--indigo); }
+.trending-list button:disabled { opacity: 0.5; cursor: default; }
+.trending-label { flex: 1; }
+.trending-value {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--yellow);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ── Status / banners ─────────────────────────────────────────────────── */
 .status-row { padding: 10px 22px 8px; font-size: 15px; }
 .status-row strong { font-family: var(--serif-display); font-weight: 700; letter-spacing: 0.01em; }
@@ -205,6 +264,10 @@ select {
 .status-row .loading { color: var(--yellow); }
 
 .banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.06em;
@@ -216,6 +279,20 @@ select {
   border-top: 1px solid rgba(255, 163, 0, 0.35);
   border-bottom: 1px solid rgba(255, 163, 0, 0.35);
 }
+.banner-warn button {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--yellow);
+  background: rgba(255, 163, 0, 0.15);
+  border: 1px solid rgba(255, 163, 0, 0.5);
+  border-radius: 3px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.banner-warn button:hover { background: var(--yellow); color: var(--ink); }
 
 /* ── Graph & debug panel ──────────────────────────────────────────────── */
 .main-row { display: flex; flex: 1; min-height: 480px; position: relative; }
@@ -351,6 +428,17 @@ select {
   text-transform: uppercase;
 }
 .debug-panel .note { color: #7a5a20; font-size: 12px; font-style: italic; }
+.debug-panel .money-delta { font-size: 13px; font-weight: 500; margin: 2px 0 0; }
+.debug-panel .money-delta.up { color: #205c37; }
+.debug-panel .money-delta.down { color: #8c3a1f; }
+.debug-panel .money-delta em {
+  font-family: var(--mono);
+  color: #6d6152;
+  font-style: normal;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .debug-panel .issues { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; }
 .debug-panel h4 {
   font-family: var(--mono);
@@ -379,6 +467,21 @@ select {
   border-top: 1px solid var(--rule);
 }
 .legend .sep { flex: 0 0 12px; }
+.color-mode-toggle button {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gray);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 2px 6px;
+  margin-left: 2px;
+  cursor: pointer;
+}
+.color-mode-toggle button.on { color: var(--orange); border-color: rgba(255, 79, 0, 0.4); }
+.color-mode-toggle button:hover { color: var(--lunar); }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
 .sw { display: inline-block; width: 14px; height: 5px; margin-right: 5px; border-radius: 1px; }
 
@@ -539,4 +642,43 @@ select {
 @keyframes tour-pulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(255, 79, 0, 0.2), 0 0 20px rgba(255, 79, 0, 0.3); }
   50% { box-shadow: 0 0 0 3px rgba(255, 79, 0, 0.4), 0 0 30px rgba(255, 79, 0, 0.5); }
+}
+
+/* ── Responsive (narrow viewports) ───────────────────────────────────────
+   The graph + 330px-fixed side panel and the fixed-width guided-tour panel
+   are designed for a desktop-width canvas; below this, the side panel moves
+   under the graph instead of beside it, and floating panels go full-width. */
+@media (max-width: 760px) {
+  .app-header { flex-wrap: wrap; row-gap: 10px; }
+  .masthead { order: 1; }
+  .searchbox { order: 2; flex: 1 1 100%; max-width: none; }
+  .controls { order: 3; flex-wrap: wrap; row-gap: 8px; }
+
+  .main-row { flex-direction: column; min-height: 0; }
+  .graph-wrap { min-height: 340px; }
+  .debug-panel {
+    width: auto;
+    max-height: 50vh;
+    border-left: none;
+    border-top: 1px solid var(--orange);
+  }
+
+  .legend, .strip-legend { flex-wrap: wrap; row-gap: 8px; }
+  .legend .hint { margin-left: 0; flex: 1 1 100%; }
+
+  .empty-state { padding: 40px 16px; }
+
+  .trending-list button { flex-wrap: wrap; row-gap: 4px; }
+  .trending-value { margin-left: auto; }
+
+  .guided-tour, .guided-tour.with-side-panel {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    transform: none;
+  }
+  /* The page scrolls once the side panel stacks below the graph, so docking to the
+     top no longer reliably clears the (now much taller, wrapped) header either —
+     fall back to the same bottom position every other step already uses. */
+  .guided-tour.dock-top { top: auto; bottom: 24px; }
 }

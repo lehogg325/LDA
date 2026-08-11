@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LegendBar, TruncationBanner } from "./components/Banners";
+import { FailedQuartersBanner, LegendBar, TruncationBanner } from "./components/Banners";
 import { DebugPanel } from "./components/DebugPanel";
 import { Footer } from "./components/Footer";
 import GuidedTour from "./components/GuidedTour";
@@ -8,6 +8,7 @@ import { GraphView } from "./components/GraphView";
 import { QuarterSlider } from "./components/QuarterSlider";
 import { SearchBox } from "./components/SearchBox";
 import { TimelineStrip } from "./components/TimelineStrip";
+import { TrendingPanel } from "./components/TrendingPanel";
 import { useEgoWindow } from "./graph/useEgoWindow";
 import { useStore } from "./state/store";
 
@@ -82,6 +83,7 @@ export default function App() {
             represent have filed their disclosures. Search for any registrant, client,
             lobbyist, or government entity — and watch its network change, quarter by
             quarter, across eighteen years.</p>
+          <TrendingPanel onSelect={setAnchor} />
           <button className="empty-state-tour-btn" onClick={() => setTourActive(true)}>
             New here? Take the tour
           </button>
@@ -107,10 +109,11 @@ export default function App() {
             )}
           </div>
           <TruncationBanner ego={currentEgo} />
+          {!isLoading && <FailedQuartersBanner count={failedQuarters} />}
           <div className="main-row">
             <GraphView union={union} positions={positions} />
             <NodePanel expansionInfo={expansionInfo} highlighted={tourHighlight === "issues"} />
-            <DebugPanel />
+            <DebugPanel quarters={union?.quarters ?? []} />
           </div>
           <LegendBar />
           {union && positions && (

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, periodLabel, type SearchHit } from "../api/client";
+import { api, ordLabel as formatOrd, type SearchHit } from "../api/client";
 import { useStore } from "../state/store";
 
 const TYPE_BADGE: Record<string, string> = {
@@ -8,7 +8,9 @@ const TYPE_BADGE: Record<string, string> = {
 
 export function SearchBox() {
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<SearchHit[]>([]);
+  // null = not yet searched (query too short, or just cleared) — distinct from an
+  // empty array, which means a search actually completed with zero matches.
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [open, setOpen] = useState(false);
   const setAnchor = useStore((s) => s.setAnchor);
   const anchor = useStore((s) => s.anchor);
@@ -20,7 +22,7 @@ export function SearchBox() {
   useEffect(() => {
     if (anchor === null) {
       setQ("");
-      setHits([]);
+      setHits(null);
       setOpen(false);
     }
   }, [anchor]);
@@ -28,20 +30,18 @@ export function SearchBox() {
   useEffect(() => {
     if (suppressSearch.current) { suppressSearch.current = false; return; }
     window.clearTimeout(timer.current);
-    if (q.trim().length < 2) { setHits([]); return; }
+    if (q.trim().length < 2) { setHits(null); return; }
     timer.current = window.setTimeout(async () => {
       try {
         const r = await api.search(q.trim());
         setHits(r.results);
         setOpen(true);
-      } catch { setHits([]); }
+      } catch { setHits(null); }
     }, 180);
     return () => window.clearTimeout(timer.current);
   }, [q]);
 
-  const ordLabel = (ord: number | null) =>
-    ord === null ? "" : `${Math.floor(ord / 10)} ${periodLabel(
-      ["", "first_quarter", "second_quarter", "third_quarter", "fourth_quarter", "mid_year", "year_end"][ord % 10])}`;
+  const ordLabel = (ord: number | null) => (ord === null ? "" : formatOrd(ord));
 
   return (
     <div className="searchbox">
@@ -49,11 +49,13 @@ export function SearchBox() {
         value={q}
         placeholder="Search registrants, clients, lobbyists, government entities…"
         onChange={(e) => setQ(e.target.value)}
-        onFocus={() => hits.length && setOpen(true)}
+        onFocus={() => hits !== null && setOpen(true)}
       />
-      {open && hits.length > 0 && (
+      {open && hits !== null && (
         <ul className="search-results" onMouseLeave={() => setOpen(false)}>
-          {hits.map((h) => (
+          {hits.length === 0 ? (
+            <li className="search-no-results">No matches for “{q.trim()}”</li>
+          ) : hits.map((h) => (
             <li
               key={`${h.node_type}:${h.label}:${h.ids[0]}`}
               onClick={() => {
@@ -61,7 +63,7 @@ export function SearchBox() {
                 setOpen(false);
                 suppressSearch.current = true;   // programmatic setQ must not re-search
                 setQ(h.label);
-                setHits([]);
+                setHits(null);
               }}
             >
               <span className={`badge badge-${h.node_type}`}>{TYPE_BADGE[h.node_type]}</span>

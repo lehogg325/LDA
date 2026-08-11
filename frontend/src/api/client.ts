@@ -102,6 +102,19 @@ export interface NodeActivities {
   truncated: boolean;
 }
 
+export interface TopResult {
+  node_type: NodeType;
+  node_id: number;
+  label: string;
+  degree: number;
+  weighted_degree: number;
+  total_income: number | null;
+  total_expenses: number | null;
+  betweenness: number | null;
+}
+
+export type TopMetric = "weighted_degree" | "degree" | "total_income" | "total_expenses" | "betweenness";
+
 export interface FilingBehindEdge {
   filing_uuid: string;
   filing_type_display: string;
@@ -109,6 +122,36 @@ export interface FilingBehindEdge {
   amount_type: string | null;
   is_current: boolean;
   filing_document_url: string;
+}
+
+export interface DiffEdge {
+  edge_type: "represents" | "worked_on" | "targeted";
+  source: { node_type: NodeType; node_id: number };
+  target: { node_type: NodeType; node_id: number };
+  filing_uuid: string;
+  amount: number | null;
+  amount_type: "income" | "expenses" | null;
+  issue_codes: string[] | null;
+  attribution_level: "activity" | "filing" | null;
+  is_superseded: boolean;
+}
+
+export interface DiffPersisting {
+  edge: DiffEdge;
+  amount_before?: number;
+  amount_after?: number;
+  amount_delta?: number;
+}
+
+export interface DiffResponse {
+  anchor: { node_type: NodeType; ids: number[] };
+  view: ViewMode;
+  from: { year: number; period: string };
+  to: { year: number; period: string };
+  added: DiffEdge[];
+  dropped: DiffEdge[];
+  persisting: DiffPersisting[];
+  truncated: boolean;
 }
 
 async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -158,10 +201,21 @@ export const api = {
   timeline: (t: NodeType, ids: number[]) =>
     get<{ quarters: TimelineQuarter[] }>(`/api/timeline/${t}/${ids[0]}?ids=${ids.join(",")}`),
   meta: () => get<Meta>("/api/meta"),
+  quarterTop: (year: number, period: string, metric: TopMetric, limit = 10) =>
+    get<{ year: number; period: string; metric: TopMetric; results: TopResult[] }>(
+      `/api/quarter/${year}/${period}/top?metric=${metric}&limit=${limit}`,
+    ),
   nodeActivities: (t: NodeType, ids: number[], year: number, period: string, view: ViewMode) =>
     get<NodeActivities>(
       `/api/node-activities?node_type=${t}&ids=${ids.join(",")}&year=${year}` +
         `&period=${period}&view=${view}`,
+    ),
+  diff: (t: NodeType, ids: number[], fromYear: number, fromPeriod: string,
+         toYear: number, toPeriod: string, view: ViewMode) =>
+    get<DiffResponse>(
+      `/api/diff?node_type=${t}&node_id=${ids[0]}&ids=${ids.join(",")}` +
+        `&from_year=${fromYear}&from_period=${fromPeriod}` +
+        `&to_year=${toYear}&to_period=${toPeriod}&view=${view}`,
     ),
   edgeFilings: (e: EgoEdge, year: number, period: string) => {
     // A display edge may aggregate several registration-scoped IDs (a name-group
@@ -177,7 +231,13 @@ export const api = {
   },
 };
 
-export const PERIODS = ["first_quarter", "second_quarter", "third_quarter", "fourth_quarter"];
+// period_ord decodes as year*10 + digit (1-4 = quarters, 5 = mid_year, 6 = year_end).
+export const PERIODS_BY_DIGIT =
+  ["", "first_quarter", "second_quarter", "third_quarter", "fourth_quarter", "mid_year", "year_end"];
 export const periodLabel = (p: string) =>
   ({ first_quarter: "Q1", second_quarter: "Q2", third_quarter: "Q3", fourth_quarter: "Q4",
      mid_year: "MY", year_end: "YE" })[p] ?? p;
+export const ordToYearPeriod = (ord: number): { year: number; period: string } =>
+  ({ year: Math.floor(ord / 10), period: PERIODS_BY_DIGIT[ord % 10] });
+export const ordLabel = (ord: number): string =>
+  `${Math.floor(ord / 10)} ${periodLabel(PERIODS_BY_DIGIT[ord % 10])}`;

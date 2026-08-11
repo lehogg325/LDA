@@ -4,16 +4,13 @@
 // toggle. The collapsed anchor queries across its whole name-group.
 
 import { useEffect, useState } from "react";
-import { api, periodLabel, type NodeActivities } from "../api/client";
+import { api, ordLabel, ordToYearPeriod, type NodeActivities } from "../api/client";
 import type { ExpansionInfo } from "../graph/useEgoWindow";
 import { MAX_EXPANSIONS, useStore } from "../state/store";
 
 const TYPE_LABEL: Record<string, string> = {
   registrant: "Registrant", client: "Client", lobbyist: "Lobbyist", gov_entity: "Gov entity",
 };
-
-const PERIODS_BY_DIGIT = ["", "first_quarter", "second_quarter", "third_quarter",
-                          "fourth_quarter", "mid_year", "year_end"];
 
 interface NodePanelProps {
   expansionInfo?: ExpansionInfo[];
@@ -35,8 +32,7 @@ export function NodePanel({ expansionInfo, highlighted }: NodePanelProps) {
   useEffect(() => {
     setData(null);
     if (!node || quarterOrd === null) return;
-    const year = Math.floor(quarterOrd / 10);
-    const period = PERIODS_BY_DIGIT[quarterOrd % 10];
+    const { year, period } = ordToYearPeriod(quarterOrd);
     // The collapsed anchor node carries min(group ids); expand back to the group.
     const ids = anchor && node.node_type === anchor.node_type
       && node.node_id === Math.min(...anchor.ids)
@@ -47,9 +43,7 @@ export function NodePanel({ expansionInfo, highlighted }: NodePanelProps) {
   }, [node, anchor, quarterOrd, view]);
 
   if (!node) return null;
-  const quarter = quarterOrd !== null
-    ? `${Math.floor(quarterOrd / 10)} ${periodLabel(PERIODS_BY_DIGIT[quarterOrd % 10])}`
-    : "";
+  const quarter = quarterOrd !== null ? ordLabel(quarterOrd) : "";
 
   // Expansion controls: hidden for the anchor (its connections ARE the graph).
   const isAnchor = anchor !== null && node.node_type === anchor.node_type

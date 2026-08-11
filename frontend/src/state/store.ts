@@ -23,11 +23,14 @@ export interface Expansion {
 
 export const MAX_EXPANSIONS = 12;
 
+export type ColorMode = "type" | "community";
+
 interface AppState {
   anchor: Anchor | null;
   quarterOrd: number | null; // currently displayed quarter (period_ord)
   view: ViewMode;
   hops: 1 | 2;
+  colorMode: ColorMode;
   selectedEdge: EgoEdge | null;
   selectedNode: SelectedNode | null;
   expansions: Expansion[];
@@ -35,6 +38,7 @@ interface AppState {
   setQuarterOrd: (q: number) => void;
   setView: (v: ViewMode) => void;
   setHops: (h: 1 | 2) => void;
+  setColorMode: (m: ColorMode) => void;
   setSelectedEdge: (e: EgoEdge | null) => void;
   setSelectedNode: (n: SelectedNode | null) => void;
   addExpansion: (e: Expansion) => void;
@@ -49,6 +53,7 @@ export const useStore = create<AppState>((set) => ({
   quarterOrd: null,
   view: "amended",
   hops: 1,
+  colorMode: "type",
   selectedEdge: null,
   selectedNode: null,
   expansions: [],
@@ -57,6 +62,7 @@ export const useStore = create<AppState>((set) => ({
   setQuarterOrd: (quarterOrd) => set({ quarterOrd }),
   setView: (view) => set({ view, expansions: [] }),
   setHops: (hops) => set({ hops, expansions: [] }),
+  setColorMode: (colorMode) => set({ colorMode }),
   setSelectedEdge: (selectedEdge) =>
     set(selectedEdge ? { selectedEdge, selectedNode: null } : { selectedEdge }),
   setSelectedNode: (selectedNode) =>

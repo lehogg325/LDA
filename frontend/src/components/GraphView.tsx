@@ -14,6 +14,7 @@ import Graph from "graphology";
 import { useEffect, useRef } from "react";
 import Sigma from "sigma";
 import type { EgoEdge, EgoResponse } from "../api/client";
+import { communityColor } from "../graph/communityColor";
 import { nodeKey } from "../graph/useEgoWindow";
 import type { Positions } from "../graph/orbitLayout";
 import {
@@ -64,6 +65,8 @@ export function GraphView({ union, positions }: Props) {
   const setSpotlightRef = useRef<(node: string | null, pinned: boolean) => void>(() => {});
   const quarterOrd = useStore((s) => s.quarterOrd);
   const selectedNode = useStore((s) => s.selectedNode);
+  const colorMode = useStore((s) => s.colorMode);
+  const colorModeRef = useRef(colorMode);
   const setSelectedEdge = useStore((s) => s.setSelectedEdge);
   const setSelectedNode = useStore((s) => s.setSelectedNode);
 
@@ -149,12 +152,20 @@ export function GraphView({ union, positions }: Props) {
       },
       nodeReducer: (node, data) => {
         if (data.hidden) return data;
+        const attrs = data as { tStatus?: string; communityId?: number | null };
         const style = spotlightNodeStyle(spotlightRef.current, {
-          key: node, tStatus: (data as { tStatus?: string }).tStatus,
+          key: node, tStatus: attrs.tStatus,
         });
+        // Community coloring is computed live here (not baked in per-quarter) so
+        // toggling the mode recolors instantly without rebuilding the graph.
+        // Dropped nodes stay their fixed dim gray regardless of mode — community
+        // hue is only meaningful for what's actually present this quarter.
+        const baseColor = attrs.tStatus !== "dropped" && colorModeRef.current === "community"
+          ? communityColor(attrs.communityId ?? null)
+          : (data.color as string);
         return {
           ...data,
-          color: style.dim ? DIMMED_NODE : (data.color as string),
+          color: style.dim ? DIMMED_NODE : baseColor,
           label: style.label === "suppress" ? null : (data.label as string),
           forceLabel: style.forceLabel ?? (style.label === "keep" && (data.forceLabel as boolean)),
         };
@@ -208,7 +219,9 @@ export function GraphView({ union, positions }: Props) {
     });
 
     sigmaRef.current = sigma;
-    (window as unknown as Record<string, unknown>).__lda = { graph, sigma };
+    if (import.meta.env.DEV) {
+      (window as unknown as Record<string, unknown>).__lda = { graph, sigma };
+    }
 
     // Sigma sizes its canvas from the container's dimensions AT CONSTRUCTION TIME.
     // The quarter slider and timeline strip mount later (once data loads) and shrink
@@ -228,6 +241,13 @@ export function GraphView({ union, positions }: Props) {
     };
   }, [setSelectedEdge, setSelectedNode]);
 
+  // colorMode lives in a ref, not a nodeReducer dependency: toggling it just needs a
+  // refresh (nodeReducer reads the ref live), never a graph rebuild.
+  useEffect(() => {
+    colorModeRef.current = colorMode;
+    sigmaRef.current?.refresh();
+  }, [colorMode]);
+
   // Rebuild graph content when the union (anchor/window/view) changes — positions fixed.
   useEffect(() => {
     const graph = graphRef.current;
@@ -244,6 +264,7 @@ export function GraphView({ union, positions }: Props) {
         label: n.label,
         color: NODE_TYPE_COLORS[n.node_type] ?? "#8C8C8C",
         nodeType: n.node_type,
+        communityId: null,
         hidden: true,
       });
     }
@@ -266,6 +287,8 @@ export function GraphView({ union, positions }: Props) {
     const anchors = new Set(now.nodes.filter((n) => n.is_anchor).map((n) => nodeKey(n.node_type, n.node_id)));
     anchorsRef.current = anchors;
     const qDegree = new Map(now.nodes.map((n) => [nodeKey(n.node_type, n.node_id), n.metrics?.degree ?? 0]));
+    const communityOf = new Map(
+      now.nodes.map((n) => [nodeKey(n.node_type, n.node_id), n.metrics?.community_id ?? null]));
 
     // Curated ambient labels: top hubs this quarter + the anchor itself (display
     // space collapses a group anchor to a single node).
@@ -279,6 +302,7 @@ export function GraphView({ union, positions }: Props) {
         hidden: status === "hidden",
         tStatus: status,
         qDegree: qDegree.get(key) ?? 0,
+        communityId: communityOf.get(key) ?? null,
         color: status === "dropped" ? NODE_DROPPED : (NODE_TYPE_COLORS[attrs.nodeType as string] ?? "#8C8C8C"),
         size: isAnchor
           ? Math.max(4, (attrs.baseSize as number) * 1.35)
